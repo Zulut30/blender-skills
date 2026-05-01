@@ -1,0 +1,749 @@
+[
+  {
+    "name": "enable_eevee_quality",
+    "signature": "enable_eevee_quality()",
+    "category": "scene",
+    "return": "value (e.g. `applied`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "yes",
+    "notes": ""
+  },
+  {
+    "name": "reset_scene",
+    "signature": "reset_scene()",
+    "category": "scene",
+    "return": "None",
+    "side_effects": "purges all data-blocks and resets the scene",
+    "idempotency": "partial",
+    "notes": "wipes orphan data; call once at start of script"
+  },
+  {
+    "name": "safe_engine",
+    "signature": "safe_engine()",
+    "category": "scene",
+    "return": "value (e.g. `next(iter(available)) if available else 'BLENDER_EEVEE'`)",
+    "side_effects": "mutates scene view-transform / engine settings",
+    "idempotency": "yes",
+    "notes": "falls back to CYCLES if requested engine unavailable"
+  },
+  {
+    "name": "save_blend",
+    "signature": "save_blend(filepath)",
+    "category": "scene",
+    "return": "None",
+    "side_effects": "writes a .blend file to disk",
+    "idempotency": "partial",
+    "notes": "creates parent dirs; relative paths resolve to bpy cwd"
+  },
+  {
+    "name": "set_filmic_high_contrast",
+    "signature": "set_filmic_high_contrast()",
+    "category": "scene",
+    "return": "value (e.g. `out`)",
+    "side_effects": "mutates scene view-transform / engine settings",
+    "idempotency": "yes",
+    "notes": "sets view_transform=Filmic, look=High Contrast"
+  },
+  {
+    "name": "set_output_path",
+    "signature": "set_output_path(path, file_format='PNG')",
+    "category": "scene",
+    "return": "None",
+    "side_effects": "sets scene.render.filepath",
+    "idempotency": "yes",
+    "notes": ""
+  },
+  {
+    "name": "add_barrel",
+    "signature": "add_barrel(name, location, radius=0.35, height=0.85, wood_material=None, band_material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "wood barrel with bands"
+  },
+  {
+    "name": "add_cone",
+    "signature": "add_cone(name, location, radius1, radius2, depth, material=None, vertices=32)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "thin wrapper over primitive_cone_add"
+  },
+  {
+    "name": "add_cube",
+    "signature": "add_cube(name, location, scale, material=None)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "thin wrapper over mesh.primitive_cube_add"
+  },
+  {
+    "name": "add_curtain",
+    "signature": "add_curtain(name, location, width=1.2, height=2.4, segments_x=6, segments_y=12, material=None, wave_amplitude=0.08)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "subdivided drape; consider cloth"
+  },
+  {
+    "name": "add_cyl",
+    "signature": "add_cyl(name, location, radius, depth, material=None, vertices=32)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "thin wrapper over primitive_cylinder_add"
+  },
+  {
+    "name": "add_door_frame",
+    "signature": "add_door_frame(name, location, width=0.9, height=2.1, depth=0.25, material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `joined`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "creates 3-piece frame around opening"
+  },
+  {
+    "name": "add_gargoyle",
+    "signature": "add_gargoyle(name, location, facing='+X', material=None, scale=0.5)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "stylized low-poly creature"
+  },
+  {
+    "name": "add_haybale",
+    "signature": "add_haybale(name, location, scale=1.0, color=(0.85, 0.72, 0.3))",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "low-poly hay cylinder"
+  },
+  {
+    "name": "add_market_stall",
+    "signature": "add_market_stall(name, location, width=2.5, depth=1.5, height=2.2, awning_color=(0.5, 0.15, 0.1), wood_material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "wood frame + cloth roof"
+  },
+  {
+    "name": "add_plane",
+    "signature": "add_plane(name, location, size, material=None)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "thin wrapper over primitive_plane_add"
+  },
+  {
+    "name": "add_rug",
+    "signature": "add_rug(name, location, size_x=2.0, size_y=3.0, thickness=0.04, color=(0.6, 0.2, 0.1))",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "flat textured plane"
+  },
+  {
+    "name": "add_torch",
+    "signature": "add_torch(name, location, mount_dir='+X', wood_material=None, flame_color=(1.0, 0.55, 0.15), flame_strength=12.0)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "torch with emissive flame"
+  },
+  {
+    "name": "add_torus",
+    "signature": "add_torus(name, location, major_radius=1.0, minor_radius=0.25, rotation=(0.0, 0.0, 0.0), material=None, major_segments=48, minor_segments=12)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "thin wrapper over primitive_torus_add"
+  },
+  {
+    "name": "add_tree_cluster",
+    "signature": "add_tree_cluster(center, count=5, radius=8.0, height_range=(3.0, 7.0), seed=0)",
+    "category": "mesh",
+    "return": "value (e.g. `trees`)",
+    "side_effects": "creates many mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "low-poly trees; cap count to bound poly budget"
+  },
+  {
+    "name": "add_well",
+    "signature": "add_well(name, location, radius=1.0, depth=0.6, well_height=1.0, stone_material=None, water_material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "round stone well prop"
+  },
+  {
+    "name": "add_window_cutout",
+    "signature": "add_window_cutout(wall_obj, location, width=1.2, height=1.5)",
+    "category": "mesh",
+    "return": "None",
+    "side_effects": "creates one or more mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "boolean cuts hole then frames it"
+  },
+  {
+    "name": "auto_bevel",
+    "signature": "auto_bevel(obj, width=0.02, segments=2)",
+    "category": "mesh",
+    "return": "None",
+    "side_effects": "adds and applies a modifier on the target",
+    "idempotency": "no",
+    "notes": "marks sharp edges by angle then bevels"
+  },
+  {
+    "name": "boolean_difference",
+    "signature": "boolean_difference(target, cutter, apply=True, delete_cutter=True)",
+    "category": "mesh",
+    "return": "value (e.g. `target`)",
+    "side_effects": "applies a boolean modifier (mutates target mesh)",
+    "idempotency": "no",
+    "notes": "applies modifier; target mesh must be manifold"
+  },
+  {
+    "name": "build_room_box",
+    "signature": "build_room_box(name_prefix, width, depth, height, wall_thickness=0.2, material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `{'floor': floor, 'ceiling': ceiling, 'wall_n': wall_n, 'wall`)",
+    "side_effects": "creates a multi-mesh enclosure / backdrop",
+    "idempotency": "no",
+    "notes": "interior shell with wall thickness"
+  },
+  {
+    "name": "chain_between",
+    "signature": "chain_between(name_prefix, p_start, p_end, link_count=8, link_radius=0.08, material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `created`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "torus chain between two points"
+  },
+  {
+    "name": "cleanup_materials",
+    "signature": "cleanup_materials(obj)",
+    "category": "mesh",
+    "return": "value (e.g. `removed`)",
+    "side_effects": "mutates objects and material slots in place",
+    "idempotency": "partial",
+    "notes": "removes unused slots and orphan datablocks"
+  },
+  {
+    "name": "crenellate_line",
+    "signature": "crenellate_line(name_prefix, p0, p1, z_top, material=None, merlon_w=0.4, merlon_h=0.7, merlon_t=0.4, gap=0.4)",
+    "category": "mesh",
+    "return": "value (e.g. `created`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "merlons along a line; cap count"
+  },
+  {
+    "name": "cyclorama_backdrop",
+    "signature": "cyclorama_backdrop(name='Cyclorama', size=6.0, color=(0.05, 0.05, 0.05))",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "creates a multi-mesh enclosure / backdrop",
+    "idempotency": "no",
+    "notes": "curved infinity backdrop"
+  },
+  {
+    "name": "decimate_mesh",
+    "signature": "decimate_mesh(obj, ratio=0.5)",
+    "category": "mesh",
+    "return": "None",
+    "side_effects": "adds and applies a modifier on the target",
+    "idempotency": "no",
+    "notes": "ratio in (0,1]; lower = fewer tris"
+  },
+  {
+    "name": "flag_banner",
+    "signature": "flag_banner(name, location, width=0.8, height=1.2, color=(0.7, 0.08, 0.08), pole_height=2.0)",
+    "category": "mesh",
+    "return": "tuple",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "subdivided plane; consider cloth modifier"
+  },
+  {
+    "name": "flying_buttress",
+    "signature": "flying_buttress(name, anchor_low, anchor_high, thickness=0.4, material=None, segments=8)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "arched stone support"
+  },
+  {
+    "name": "gable_roof",
+    "signature": "gable_roof(name, location, length, width, height, material=None)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "two angled planes; symmetric pitch"
+  },
+  {
+    "name": "low_poly_tree",
+    "signature": "low_poly_tree(name, location, height=4.0, trunk_radius=0.18, leaf_color=(0.18, 0.45, 0.2), trunk_color=(0.3, 0.18, 0.08))",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "trunk + cone foliage"
+  },
+  {
+    "name": "normalize_imported",
+    "signature": "normalize_imported(obj)",
+    "category": "mesh",
+    "return": "None",
+    "side_effects": "mutates objects and material slots in place",
+    "idempotency": "partial",
+    "notes": "recenters origin and scales to fit unit cube"
+  },
+  {
+    "name": "paving_stones",
+    "signature": "paving_stones(name_prefix, area_min, area_max, tile_size=0.5, height=0.05, material=None, jitter=0.04, color_jitter=0.08)",
+    "category": "mesh",
+    "return": "value (e.g. `root`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "tiled floor; cap count <= ~300"
+  },
+  {
+    "name": "place_on_floor",
+    "signature": "place_on_floor(obj, floor_z=0.0)",
+    "category": "mesh",
+    "return": "None",
+    "side_effects": "translates the object so its base z=floor",
+    "idempotency": "yes",
+    "notes": "translates obj.location.z so bbox-min sits on floor"
+  },
+  {
+    "name": "pointed_arch_window",
+    "signature": "pointed_arch_window(name, location, width, height, depth, material=None, facing='-Y', frame_thickness=0.15, frame_material=None)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "Gothic arch profile"
+  },
+  {
+    "name": "scatter_grass_tufts",
+    "signature": "scatter_grass_tufts(ground_obj, count=200, height_range=(0.1, 0.3), seed=0)",
+    "category": "mesh",
+    "return": "the created object",
+    "side_effects": "creates many mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "cap count <= ~300 (pitfall 31)"
+  },
+  {
+    "name": "scatter_rocks",
+    "signature": "scatter_rocks(ground_obj, count=30, size_range=(0.1, 0.5), seed=42, material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `rocks`)",
+    "side_effects": "creates many mesh objects in the current scene",
+    "idempotency": "no",
+    "notes": "cap count <= ~300 (pitfall 31)"
+  },
+  {
+    "name": "stone_block_band",
+    "signature": "stone_block_band(name_prefix, p0, p1, z_bottom, z_top, block_w=0.6, block_h=0.4, depth=0.15, material=None, jitter=0.05, seed=0)",
+    "category": "mesh",
+    "return": "value (e.g. `created`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "row of cuboids; cap count"
+  },
+  {
+    "name": "tower_windows",
+    "signature": "tower_windows(name_prefix, center_xy, tower_radius, z_levels, count_per_level=4, slit_w=0.18, slit_h=1.2, material=None, frame_material=None)",
+    "category": "mesh",
+    "return": "value (e.g. `created`)",
+    "side_effects": "side effects depend on usage",
+    "idempotency": "no",
+    "notes": "evenly spaced openings around tower"
+  },
+  {
+    "name": "mat",
+    "signature": "mat(name, color, roughness=0.7, metallic=0.0, emission=None, emission_strength=1.0)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "get-or-creates a material data-block",
+    "idempotency": "yes",
+    "notes": "get-or-create by name; safe to call repeatedly"
+  },
+  {
+    "name": "procedural_canvas_flag",
+    "signature": "procedural_canvas_flag(name, base=(0.7, 0.08, 0.08), wear=0.3)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_dirt_path",
+    "signature": "procedural_dirt_path(name, base=(0.3, 0.22, 0.14), gravel_scale=20.0)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_grass",
+    "signature": "procedural_grass(name, base=(0.18, 0.34, 0.12), variation=0.1)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_metal_aged",
+    "signature": "procedural_metal_aged(name, base=(0.7, 0.55, 0.25), patina=(0.18, 0.35, 0.3), patina_amount=0.4)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_slate_tiles",
+    "signature": "procedural_slate_tiles(name, base=(0.1, 0.11, 0.15), tile_scale=8.0)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_stone",
+    "signature": "procedural_stone(name, base=(0.45, 0.42, 0.38), variation=0.15, bumpiness=0.3, mortar_dark=0.5)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_water",
+    "signature": "procedural_water(name, base=(0.02, 0.07, 0.12), wave_scale=6.0)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "procedural_wood",
+    "signature": "procedural_wood(name, base=(0.3, 0.18, 0.08), grain_scale=12.0)",
+    "category": "materials",
+    "return": "value (e.g. `m`)",
+    "side_effects": "creates a material data-block with shader nodes",
+    "idempotency": "no",
+    "notes": "creates new material each call; reuse via mat() if needed"
+  },
+  {
+    "name": "add_area_light",
+    "signature": "add_area_light(name, location, rotation_euler, energy=100.0, size=1.0, color=(1, 1, 1))",
+    "category": "lighting",
+    "return": "the created object",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "tweak size and energy together"
+  },
+  {
+    "name": "add_cloud_drifts",
+    "signature": "add_cloud_drifts(positions=None, plane_size=80, tilt_deg=15, name_prefix='Cloud')",
+    "category": "lighting",
+    "return": "the created object",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "cap count to keep render time reasonable (pitfall 31)"
+  },
+  {
+    "name": "add_emissive_plane",
+    "signature": "add_emissive_plane(name, location, size=1.0, energy=5.0, color=(1, 1, 1))",
+    "category": "lighting",
+    "return": "the created object",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "for soft cards / billboards"
+  },
+  {
+    "name": "add_volumetric_fog",
+    "signature": "add_volumetric_fog(density=0.02, color=(0.7, 0.75, 0.85), anisotropy=0.0)",
+    "category": "lighting",
+    "return": "value (e.g. `nt`)",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "uses a large cube with volume scatter shader"
+  },
+  {
+    "name": "hdri_world",
+    "signature": "hdri_world(hdri_path, strength=1.0, rotation_deg=0.0)",
+    "category": "lighting",
+    "return": "None",
+    "side_effects": "modifies scene.world.node_tree",
+    "idempotency": "yes",
+    "notes": "loads HDRI from path; check filepath exists"
+  },
+  {
+    "name": "rim_light",
+    "signature": "rim_light(target_obj, energy=3.0, color=(0.7, 0.85, 1.0))",
+    "category": "lighting",
+    "return": "the created object",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "high-energy rim from behind subject"
+  },
+  {
+    "name": "set_hosek_sky",
+    "signature": "set_hosek_sky(sun_elevation_deg=20, sun_azimuth_deg=225, turbidity=2.5, ground_albedo=0.3, strength=1.3)",
+    "category": "lighting",
+    "return": "value (e.g. `sun_dir`)",
+    "side_effects": "modifies scene.world.node_tree",
+    "idempotency": "yes",
+    "notes": "uses HOSEK_WILKIE; NISHITA missing in some 4.x builds"
+  },
+  {
+    "name": "set_sunset_world",
+    "signature": "set_sunset_world(top=(0.95, 0.65, 0.4), bottom=(0.2, 0.18, 0.3), strength=0.8)",
+    "category": "lighting",
+    "return": "value (e.g. `nt`)",
+    "side_effects": "modifies scene.world.node_tree",
+    "idempotency": "yes",
+    "notes": "warm gradient via Sky Texture nodes"
+  },
+  {
+    "name": "set_world_sky",
+    "signature": "set_world_sky(top=(0.55, 0.75, 0.95), strength=1.2)",
+    "category": "lighting",
+    "return": "value (e.g. `world`)",
+    "side_effects": "modifies scene.world.node_tree",
+    "idempotency": "yes",
+    "notes": "preset entry point for sky textures"
+  },
+  {
+    "name": "studio_dark_world",
+    "signature": "studio_dark_world(strength=0.3, color=(0.02, 0.02, 0.02))",
+    "category": "lighting",
+    "return": "value (e.g. `set_world_sky(top=color, strength=strength)`)",
+    "side_effects": "modifies scene.world.node_tree",
+    "idempotency": "yes",
+    "notes": "neutral dark grey world for product shots"
+  },
+  {
+    "name": "three_point_light",
+    "signature": "three_point_light(target=(0, 0, 0), key_energy=4.0)",
+    "category": "lighting",
+    "return": "tuple",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "creates Key/Fill/Rim area lights"
+  },
+  {
+    "name": "warm_key_light",
+    "signature": "warm_key_light(target=(0, 0, 0), energy=5.0, color=(1.0, 0.78, 0.55))",
+    "category": "lighting",
+    "return": "the created object",
+    "side_effects": "creates lights / emissive geometry in the scene",
+    "idempotency": "no",
+    "notes": "single warm key with soft falloff"
+  },
+  {
+    "name": "add_camera_dof",
+    "signature": "add_camera_dof(target_obj=None, focus_distance=None, fstop=2.8, camera=None)",
+    "category": "camera",
+    "return": "value (e.g. `camera`)",
+    "side_effects": "mutates camera DOF settings",
+    "idempotency": "yes",
+    "notes": "set focus object first, then aperture"
+  },
+  {
+    "name": "auto_frame",
+    "signature": "auto_frame(objects, padding=1.2, elevation_deg=30, azimuth_deg=45, lens=35, name='SkillCamera')",
+    "category": "camera",
+    "return": "tuple",
+    "side_effects": "creates or replaces the SkillCamera and points it at targets",
+    "idempotency": "partial",
+    "notes": "wraps frame_camera with bounding-box of all visible meshes"
+  },
+  {
+    "name": "bbox_of",
+    "signature": "bbox_of(objects)",
+    "category": "camera",
+    "return": "tuple",
+    "side_effects": "no side effects (pure)",
+    "idempotency": "yes",
+    "notes": "pure; returns (min, max) world-space tuple"
+  },
+  {
+    "name": "frame_camera",
+    "signature": "frame_camera(target=(0, 0, 0), distance=18, elevation_deg=35, azimuth_deg=45, lens=35, name='SkillCamera')",
+    "category": "camera",
+    "return": "value (e.g. `cam`)",
+    "side_effects": "creates or replaces the SkillCamera and points it at targets",
+    "idempotency": "partial",
+    "notes": "removes any existing SkillCamera before creating new one"
+  },
+  {
+    "name": "setup_turntable",
+    "signature": "setup_turntable(subject_obj, frame_start=1, frame_end=120, radius=None, height_offset=0.3, lens=85)",
+    "category": "camera",
+    "return": "value (e.g. `cam`)",
+    "side_effects": "creates a turntable rig and inserts keyframes",
+    "idempotency": "no",
+    "notes": "inserts orbit keyframes on a parent empty"
+  },
+  {
+    "name": "enable_denoising",
+    "signature": "enable_denoising(engine='auto')",
+    "category": "render",
+    "return": "None",
+    "side_effects": "mutates scene.render / scene timeline settings",
+    "idempotency": "yes",
+    "notes": "Cycles + Eevee Next compatible"
+  },
+  {
+    "name": "set_render",
+    "signature": "set_render(engine=None, resolution=(1280, 800), samples=64)",
+    "category": "render",
+    "return": "value (e.g. `r`)",
+    "side_effects": "mutates scene.render / scene timeline settings",
+    "idempotency": "yes",
+    "notes": "use this rather than poking scene.render directly"
+  },
+  {
+    "name": "set_render_resolution",
+    "signature": "set_render_resolution(width=1920, height=1080, percentage=100)",
+    "category": "render",
+    "return": "None",
+    "side_effects": "mutates scene.render / scene timeline settings",
+    "idempotency": "yes",
+    "notes": "resolution_percentage defaults to 100"
+  },
+  {
+    "name": "bezier_orbit_keyframes",
+    "signature": "bezier_orbit_keyframes(center, radius, height, n_samples=8, frame_start=1, frame_end=120, ccw=True)",
+    "category": "animation",
+    "return": "tuple",
+    "side_effects": "inserts keyframes on the target object",
+    "idempotency": "no",
+    "notes": "smooth orbit via bezier handles"
+  },
+  {
+    "name": "bird_flight_keyframes",
+    "signature": "bird_flight_keyframes(camera, plan, interpolation='BEZIER')",
+    "category": "animation",
+    "return": "value (e.g. `camera`)",
+    "side_effects": "inserts keyframes on the target object",
+    "idempotency": "no",
+    "notes": "noise-driven flight path"
+  },
+  {
+    "name": "keyframe_camera_path",
+    "signature": "keyframe_camera_path(camera, keyframes, look_at_per_key=None, lens_per_key=None, interpolation='BEZIER')",
+    "category": "animation",
+    "return": "value (e.g. `cam`)",
+    "side_effects": "inserts keyframes on the target object",
+    "idempotency": "no",
+    "notes": "inserts location+rotation keyframes"
+  },
+  {
+    "name": "render_animation_frames",
+    "signature": "render_animation_frames(output_dir, frame_start, frame_end, file_prefix='frame_', resolution=None, samples=None, file_format='PNG')",
+    "category": "animation",
+    "return": "value (e.g. `paths`)",
+    "side_effects": "writes rendered images to disk",
+    "idempotency": "no",
+    "notes": "writes PNG sequence; cap frame count"
+  },
+  {
+    "name": "set_animation_range",
+    "signature": "set_animation_range(start=1, end=120, fps=24)",
+    "category": "animation",
+    "return": "tuple",
+    "side_effects": "mutates scene.render / scene timeline settings",
+    "idempotency": "yes",
+    "notes": "scene.frame_start/end inclusive"
+  },
+  {
+    "name": "set_object_origin",
+    "signature": "set_object_origin(obj, world_pos)",
+    "category": "animation",
+    "return": "the created object",
+    "side_effects": "moves object origin (mutates mesh + transform)",
+    "idempotency": "yes",
+    "notes": "moves origin without translating mesh"
+  },
+  {
+    "name": "swing_door",
+    "signature": "swing_door(obj, hinge_world_pos, axis='Z', closed_deg=0, open_deg=90, start_frame=1, swing_in_frame=150, swing_out_frame=175, end_frame=192)",
+    "category": "animation",
+    "return": "the created object",
+    "side_effects": "inserts keyframes on the target object",
+    "idempotency": "no",
+    "notes": "sets origin to hinge before rotation keyframes"
+  },
+  {
+    "name": "import_fbx",
+    "signature": "import_fbx(filepath, name=None)",
+    "category": "import_export",
+    "return": "value (e.g. `tops`)",
+    "side_effects": "imports external file and adds objects to the scene",
+    "idempotency": "no",
+    "notes": "uses bpy.ops.import_scene.fbx"
+  },
+  {
+    "name": "import_obj",
+    "signature": "import_obj(filepath, name=None)",
+    "category": "import_export",
+    "return": "value (e.g. `joined`)",
+    "side_effects": "imports external file and adds objects to the scene",
+    "idempotency": "no",
+    "notes": "uses bpy.ops.wm.obj_import (Blender 4.x)"
+  },
+  {
+    "name": "gn_array_along_curve",
+    "signature": "gn_array_along_curve(obj, curve_obj, count=10, name='GN_ArrayCurve')",
+    "category": "geometry_nodes",
+    "return": "value (e.g. `container`)",
+    "side_effects": "creates / attaches a geometry-nodes modifier",
+    "idempotency": "no",
+    "notes": "geometry-nodes graph builder; verify node names per Blender version"
+  },
+  {
+    "name": "gn_random_transform",
+    "signature": "gn_random_transform(obj, loc_range=0.1, rot_range=15.0, scale_range=0.2, seed=0)",
+    "category": "geometry_nodes",
+    "return": "value (e.g. `rv`)",
+    "side_effects": "creates / attaches a geometry-nodes modifier",
+    "idempotency": "no",
+    "notes": "geometry-nodes graph builder; verify node names per Blender version"
+  },
+  {
+    "name": "gn_scatter_on_surface",
+    "signature": "gn_scatter_on_surface(target_obj, instance_obj, density=5.0, seed=0, name='GN_Scatter')",
+    "category": "geometry_nodes",
+    "return": "the created object",
+    "side_effects": "creates / attaches a geometry-nodes modifier",
+    "idempotency": "no",
+    "notes": "geometry-nodes graph builder; verify node names per Blender version"
+  }
+]

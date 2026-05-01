@@ -3,3 +3,5 @@ __pycache__/
 *.pyo
 .DS_Store
 *.blend1
+tests/__pycache__/
+tools/__pycache__/

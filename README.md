@@ -67,6 +67,29 @@ When a session hits a new failure mode, append the symptom + cause + fix here. T
 
 Blender 5.1.1, ru_RU locale (with `use_translate_new_dataname=True` — yes, even datablock names get translated, so every helper sets `obj.name` explicitly).
 
+## Validation
+
+```bash
+python tools/validate_skill.py
+python tests/test_helper_index.py
+```
+
+Optional Blender smoke tests (require Blender on PATH):
+
+```bash
+blender -b --factory-startup --python tests/smoke_basic_scene.py
+blender -b --factory-startup --python tests/smoke_product_shot.py
+blender -b --factory-startup --python tests/smoke_animation_chunk.py
+```
+
+## Documentation
+
+- [docs/setup-blender-mcp.md](docs/setup-blender-mcp.md) — install Blender + MCP, sanity check.
+- [docs/troubleshooting.md](docs/troubleshooting.md) — common failure modes and fixes.
+- [docs/security.md](docs/security.md) — safety rules for agents using this skill.
+- [reference/helper-index.md](reference/helper-index.md) — full public helper catalog.
+- [CHANGELOG.md](CHANGELOG.md) — version history.
+
 ## License
 
 MIT — use, modify, and improve. PRs welcome, especially new pitfalls and helper coverage for material categories the skill doesn't yet handle (cloth, particles, geometry nodes for blocks, etc.).

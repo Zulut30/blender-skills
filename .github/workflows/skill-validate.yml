@@ -1,0 +1,29 @@
+name: skill-validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compile validator and test scripts
+        run: |
+          python -m py_compile tools/validate_skill.py
+          python -m py_compile tests/test_helper_index.py
+
+      - name: AST-parse helpers
+        run: |
+          python -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/_helpers.py').read_text(encoding='utf-8')); print('helpers AST OK')"
+
+      - name: Validate skill structure
+        run: python tools/validate_skill.py
+
+      - name: Test helper index
+        run: python tests/test_helper_index.py

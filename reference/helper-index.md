@@ -10,9 +10,9 @@ Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` af
 |---|---|---|---|---|
 | `enable_eevee_quality()` | value (e.g. `applied`) | side effects depend on usage | yes |  |
 | `reset_scene()` | None | purges all data-blocks and resets the scene | partial | wipes orphan data; call once at start of script |
-| `safe_engine()` | value (e.g. `next(iter(available)) if available else 'BLENDER_EEVEE'`) | mutates scene view-transform / engine settings | yes | falls back to CYCLES if requested engine unavailable |
+| `safe_engine()` | the best available render engine identifier on this Blender build. | mutates scene view-transform / engine settings | yes | falls back to CYCLES if requested engine unavailable |
 | `save_blend(filepath)` | None | writes a .blend file to disk | partial | creates parent dirs; relative paths resolve to bpy cwd |
-| `set_filmic_high_contrast()` | value (e.g. `out`) | mutates scene view-transform / engine settings | yes | sets view_transform=Filmic, look=High Contrast |
+| `set_filmic_high_contrast()` | a dict with the resolved view_transform and look strings. | mutates scene view-transform / engine settings | yes | sets view_transform=Filmic, look=High Contrast |
 | `set_output_path(path, file_format='PNG')` | None | sets scene.render.filepath | yes |  |
 
 ## mesh
@@ -43,14 +43,14 @@ Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` af
 | `crenellate_line(name_prefix, p0, p1, z_top, material=None, merlon_w=0.4, merlon_h=0.7, merlon_t=0.4, gap=0.4)` | value (e.g. `created`) | side effects depend on usage | no | merlons along a line; cap count |
 | `cyclorama_backdrop(name='Cyclorama', size=6.0, color=(0.05, 0.05, 0.05))` | value (e.g. `root`) | creates a multi-mesh enclosure / backdrop | no | curved infinity backdrop |
 | `decimate_mesh(obj, ratio=0.5)` | None | adds and applies a modifier on the target | no | ratio in (0,1]; lower = fewer tris |
-| `flag_banner(name, location, width=0.8, height=1.2, color=(0.7, 0.08, 0.08), pole_height=2.0)` | tuple | side effects depend on usage | no | subdivided plane; consider cloth modifier |
+| `flag_banner(name, location, width=0.8, height=1.2, color=(0.7, 0.08, 0.08), pole_height=2.0)` | (pole_obj, banner_obj). | side effects depend on usage | no | subdivided plane; consider cloth modifier |
 | `flying_buttress(name, anchor_low, anchor_high, thickness=0.4, material=None, segments=8)` | the created object | side effects depend on usage | no | arched stone support |
 | `gable_roof(name, location, length, width, height, material=None)` | the created object | side effects depend on usage | no | two angled planes; symmetric pitch |
 | `low_poly_tree(name, location, height=4.0, trunk_radius=0.18, leaf_color=(0.18, 0.45, 0.2), trunk_color=(0.3, 0.18, 0.08))` | value (e.g. `root`) | side effects depend on usage | no | trunk + cone foliage |
 | `normalize_imported(obj)` | None | mutates objects and material slots in place | partial | recenters origin and scales to fit unit cube |
 | `paving_stones(name_prefix, area_min, area_max, tile_size=0.5, height=0.05, material=None, jitter=0.04, color_jitter=0.08)` | value (e.g. `root`) | side effects depend on usage | no | tiled floor; cap count <= ~300 |
 | `place_on_floor(obj, floor_z=0.0)` | None | translates the object so its base z=floor | yes | translates obj.location.z so bbox-min sits on floor |
-| `pointed_arch_window(name, location, width, height, depth, material=None, facing='-Y', frame_thickness=0.15, frame_material=None)` | the created object | side effects depend on usage | no | Gothic arch profile |
+| `pointed_arch_window(name, location, width, height, depth, material=None, facing='-Y', frame_thickness=0.15, frame_material=None)` | (glass_obj, frame_obj_or_None). | side effects depend on usage | no | Gothic arch profile |
 | `scatter_grass_tufts(ground_obj, count=200, height_range=(0.1, 0.3), seed=0)` | the created object | creates many mesh objects in the current scene | no | cap count <= ~300 (pitfall 31) |
 | `scatter_rocks(ground_obj, count=30, size_range=(0.1, 0.5), seed=42, material=None)` | value (e.g. `rocks`) | creates many mesh objects in the current scene | no | cap count <= ~300 (pitfall 31) |
 | `stone_block_band(name_prefix, p0, p1, z_bottom, z_top, block_w=0.6, block_h=0.4, depth=0.15, material=None, jitter=0.05, seed=0)` | value (e.g. `created`) | side effects depend on usage | no | row of cuboids; cap count |
@@ -91,9 +91,9 @@ Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` af
 
 | Function | Returns | Side effects | Idempotent | Notes |
 |---|---|---|---|---|
-| `add_camera_dof(target_obj=None, focus_distance=None, fstop=2.8, camera=None)` | value (e.g. `camera`) | mutates camera DOF settings | yes | set focus object first, then aperture |
+| `add_camera_dof(target_obj=None, focus_distance=None, fstop=2.8, camera=None)` | the camera object, or None if no camera was found. | mutates camera DOF settings | yes | set focus object first, then aperture |
 | `auto_frame(objects, padding=1.2, elevation_deg=30, azimuth_deg=45, lens=35, name='SkillCamera')` | tuple | creates or replaces the SkillCamera and points it at targets | partial | wraps frame_camera with bounding-box of all visible meshes |
-| `bbox_of(objects)` | tuple | no side effects (pure) | yes | pure; returns (min, max) world-space tuple |
+| `bbox_of(objects)` | (min_vec, max_vec) as `mathutils.Vector` pairs. | no side effects (pure) | yes | pure; returns (min, max) world-space tuple |
 | `frame_camera(target=(0, 0, 0), distance=18, elevation_deg=35, azimuth_deg=45, lens=35, name='SkillCamera')` | value (e.g. `cam`) | creates or replaces the SkillCamera and points it at targets | partial | removes any existing SkillCamera before creating new one |
 | `setup_turntable(subject_obj, frame_start=1, frame_end=120, radius=None, height_offset=0.3, lens=85)` | value (e.g. `cam`) | creates a turntable rig and inserts keyframes | no | inserts orbit keyframes on a parent empty |
 
@@ -111,9 +111,9 @@ Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` af
 |---|---|---|---|---|
 | `bezier_orbit_keyframes(center, radius, height, n_samples=8, frame_start=1, frame_end=120, ccw=True)` | tuple | inserts keyframes on the target object | no | smooth orbit via bezier handles |
 | `bird_flight_keyframes(camera, plan, interpolation='BEZIER')` | value (e.g. `camera`) | inserts keyframes on the target object | no | noise-driven flight path |
-| `keyframe_camera_path(camera, keyframes, look_at_per_key=None, lens_per_key=None, interpolation='BEZIER')` | value (e.g. `cam`) | inserts keyframes on the target object | no | inserts location+rotation keyframes |
+| `keyframe_camera_path(camera, keyframes, look_at_per_key=None, lens_per_key=None, interpolation='BEZIER')` | the camera object. | inserts keyframes on the target object | no | inserts location+rotation keyframes |
 | `render_animation_frames(output_dir, frame_start, frame_end, file_prefix='frame_', resolution=None, samples=None, file_format='PNG')` | value (e.g. `paths`) | writes rendered images to disk | no | writes PNG sequence; cap frame count |
-| `set_animation_range(start=1, end=120, fps=24)` | tuple | mutates scene.render / scene timeline settings | yes | scene.frame_start/end inclusive |
+| `set_animation_range(start=1, end=120, fps=24)` | (start, end, fps) as a tuple of ints. | mutates scene.render / scene timeline settings | yes | scene.frame_start/end inclusive |
 | `set_object_origin(obj, world_pos)` | the created object | moves object origin (mutates mesh + transform) | yes | moves origin without translating mesh |
 | `swing_door(obj, hinge_world_pos, axis='Z', closed_deg=0, open_deg=90, start_frame=1, swing_in_frame=150, swing_out_frame=175, end_frame=192)` | the created object | inserts keyframes on the target object | no | sets origin to hinge before rotation keyframes |
 

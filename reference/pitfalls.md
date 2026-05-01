@@ -236,3 +236,91 @@ mod.node_group = ng
 **Симптом:** `auto_frame([obj])` после `boolean_difference` или `transform_apply` фреймит на старый bbox; place_on_floor роняет объект под землю.
 **Причина:** `obj.bound_box` lazily пересчитывается при следующем view_layer evaluate. Сразу после оператора — кешированные данные.
 **Фикс:** Перед чтением `bound_box` явно вызови `bpy.context.view_layer.update()` или (надёжнее) `obj.evaluated_get(bpy.context.evaluated_depsgraph_get())`. Хелпер `bbox_of` делает это.
+
+## Pitfall 35: Linked / library-override объекты неизменяемы
+**Симптом:** при открытии `.blend` со ссылками на отсутствующие пути появляются "ghost" объекты с `obj.library is not None`; хелперы, итерирующие `bpy.data.objects`, падают с `AttributeError: read-only property` при `materials.append` / `obj.scale = ...`.
+**Причина:** linked / override datablocks иммутабельны со стороны зависящего файла.
+**Фикс:**
+```python
+for o in list(bpy.data.objects):
+    if o.library is not None:
+        continue  # skip linked
+# или сделать всё локальным:
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.make_local(type='ALL')
+```
+
+## Pitfall 36: `transform_apply` на multi-user mesh data
+**Симптом:** `RuntimeError: cannot apply to a multi user data` при `bpy.ops.object.transform_apply(scale=True)` на примитиве, который шарит mesh с другим объектом (часто после duplicate-linked).
+**Причина:** apply transform мутирует mesh; multi-user mesh data — общий.
+**Фикс:**
+```python
+if obj.data.users > 1:
+    obj.data = obj.data.copy()
+bpy.ops.object.transform_apply(scale=True)
+```
+
+## Pitfall 37: Повторный `scene.collection.objects.link()` бросает RuntimeError
+**Симптом:** хелпер создаёт объект и линкует его в scene collection; на втором запуске — `RuntimeError: Object 'Foo' already in collection`.
+**Причина:** объект уже залинкован прошлым вызовом; хелперы должны дедуплицировать.
+**Фикс:**
+```python
+coll = bpy.context.scene.collection
+if obj.name not in coll.objects:
+    coll.objects.link(obj)
+```
+Применяй этот паттерн в любом composite-хелпере, который создаёт Empty/light и пере-линкует их.
+
+## Pitfall 38: EEVEE viewport vs render samples расходятся
+**Симптом:** превью в viewport выглядит шумно или гладко, а финальный рендер — наоборот; разные пайплайны сэмплинга.
+**Причина:** `scene.eevee.taa_samples` (viewport) и `scene.eevee.taa_render_samples` (render) независимы; `set_render` трогает только render-сторону.
+**Фикс:** при подготовке финального рендера ставь оба для консистентности:
+```python
+for attr in ('eevee_next', 'eevee'):
+    if hasattr(scene, attr):
+        grp = getattr(scene, attr)
+        if hasattr(grp, 'taa_render_samples'): grp.taa_render_samples = N
+        if hasattr(grp, 'taa_samples'):        grp.taa_samples = max(N // 4, 8)
+```
+
+## Pitfall 39: Cycles GPU молча сваливается на CPU
+**Симптом:** `scene.cycles.device = 'GPU'` проходит, но рендер в 10 раз медленнее ожидаемого — фактически работает CPU.
+**Причина:** в user preferences также должны быть выставлены device-type и per-device enable list; одного флага сцены недостаточно.
+**Фикс:**
+```python
+prefs = bpy.context.preferences.addons['cycles'].preferences
+prefs.compute_device_type = 'OPTIX'  # или 'CUDA' / 'HIP' / 'METAL' / 'ONEAPI'
+prefs.refresh_devices()
+for d in prefs.devices:
+    d.use = d.type != 'CPU'
+scene.cycles.device = 'GPU'
+```
+На Windows + NVIDIA предпочтительнее OPTIX; если недоступен — fallback на CUDA. На macOS — METAL.
+
+## Pitfall 40: `modifier_apply` падает на скрытых объектах
+**Симптом:** `bpy.ops.object.modifier_apply(modifier='Subdivision')` возвращает `CANCELLED` без traceback, когда target скрыт во вьюпорте.
+**Причина:** poll оператора требует, чтобы объект был visible И active; скрытые объекты не проходят poll.
+**Фикс:**
+```python
+was_hidden = obj.hide_get()
+obj.hide_set(False)
+bpy.context.view_layer.objects.active = obj
+obj.select_set(True)
+bpy.ops.object.modifier_apply(modifier=mod_name)
+obj.hide_set(was_hidden)
+```
+
+## Pitfall 41: `transform_apply(scale=True)` молча сносит shape keys
+**Симптом:** меши с shape keys (face morphs, custom normals на ригах) теряют все ключи после apply scale; визуал "схлопывается" к base shape.
+**Причина:** apply scale пере-печёт mesh; дельты shape-key хранятся относительно base mesh и не могут быть пере-печены через `transform_apply`.
+**Фикс:**
+- Применяй scale ДО добавления shape keys, ИЛИ
+- Используй Mesh Data Transfer / Lattice modifier вместо scale, ИЛИ
+- Сохрани shape-key offsets, примени scale, пересоздай ключи со скейленными offsets:
+```python
+keys = [(k.name, [v.co.copy() for v in k.data]) for k in obj.data.shape_keys.key_blocks] \
+       if obj.data.shape_keys else []
+# ... apply scale ...
+# ... rebuild keys, multiplying each saved co by the scale factor ...
+```
+Хелперы вроде `add_cube` безопасны — они применяют scale до того, как существуют ключи. Актуально только при скейлинге уже-keyed мешей (например, импортированных персонажей).

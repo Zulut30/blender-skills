@@ -1,7 +1,7 @@
 ---
 name: blender
 description: Use this skill for Blender, .blend, bpy, bmesh, geometry nodes, materials, lighting, cameras, animation, rendering, imports/exports, and Blender MCP scene automation/debugging.
-version: 1.6.0
+version: 1.6.1
 ---
 
 # Blender skill

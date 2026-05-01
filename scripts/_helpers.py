@@ -10,6 +10,12 @@ import mathutils
 
 
 def reset_scene():
+    """Remove all objects and orphaned datablocks from the current scene.
+
+    Operates without selection context so it is safe in headless execution.
+    Cleans meshes, materials, cameras, lights, curves, and images that have
+    zero users after the object purge.
+    """
     # Clear all objects without relying on selection context (operators may fail in headless ctx).
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -33,6 +39,12 @@ def _set_principled_input(bsdf, names, value):
 
 
 def mat(name, color, roughness=0.7, metallic=0.0, emission=None, emission_strength=1.0):
+    """Create or update a Principled BSDF material with `obj.name=name`.
+
+    Re-uses an existing material with the matching name if present. `color` and
+    `emission` accept RGB or RGBA tuples; emission inputs are version-tolerant
+    (handles both 'Emission' and 'Emission Color' input names). Returns the material.
+    """
     m = bpy.data.materials.get(name)
     if m is None:
         m = bpy.data.materials.new(name)
@@ -85,6 +97,7 @@ def _apply_scale(obj):
 
 
 def add_cube(name, location, scale, material=None):
+    """Add a cube at `location` scaled by `scale`, with `obj.name=name`. Returns the object."""
     bpy.ops.mesh.primitive_cube_add(location=location)
     obj = bpy.context.object
     if hasattr(scale, '__len__'):
@@ -99,6 +112,7 @@ def add_cube(name, location, scale, material=None):
 
 
 def add_cyl(name, location, radius, depth, material=None, vertices=32):
+    """Add a cylinder at `location` with `radius` and `depth`, with `obj.name=name`. Returns the object."""
     bpy.ops.mesh.primitive_cylinder_add(vertices=vertices, radius=radius,
                                         depth=depth, location=location)
     obj = bpy.context.object
@@ -110,6 +124,7 @@ def add_cyl(name, location, radius, depth, material=None, vertices=32):
 
 
 def add_cone(name, location, radius1, radius2, depth, material=None, vertices=32):
+    """Add a cone with bottom `radius1` and top `radius2`, depth `depth`. Returns the object."""
     bpy.ops.mesh.primitive_cone_add(vertices=vertices, radius1=radius1, radius2=radius2,
                                     depth=depth, location=location)
     obj = bpy.context.object
@@ -121,6 +136,7 @@ def add_cone(name, location, radius1, radius2, depth, material=None, vertices=32
 
 
 def add_plane(name, location, size, material=None):
+    """Add a plane at `location` with edge `size`. Returns the object."""
     bpy.ops.mesh.primitive_plane_add(size=size, location=location)
     obj = bpy.context.object
     obj.name = name
@@ -132,6 +148,7 @@ def add_plane(name, location, size, material=None):
 def add_torus(name, location, major_radius=1.0, minor_radius=0.25,
               rotation=(0.0, 0.0, 0.0), material=None,
               major_segments=48, minor_segments=12):
+    """Add a torus with `major_radius` and `minor_radius`, rotated by `rotation`. Returns the object."""
     bpy.ops.mesh.primitive_torus_add(location=location,
                                      major_radius=major_radius,
                                      minor_radius=minor_radius,
@@ -146,6 +163,11 @@ def add_torus(name, location, major_radius=1.0, minor_radius=0.25,
 
 
 def gable_roof(name, location, length, width, height, material=None):
+    """Build a gable-roof prism (cube with top edge collapsed to a Y-axis ridge).
+
+        The result is a length x width x height block whose top vertices are pulled to
+        x=0, forming a ridge running along Y. Caller supplies material; returns the object.
+        """
     bpy.ops.mesh.primitive_cube_add(location=location)
     obj = bpy.context.object
     obj.scale = (length / 2.0, width / 2.0, height / 2.0)
@@ -171,6 +193,11 @@ def gable_roof(name, location, length, width, height, material=None):
 
 
 def safe_engine():
+    """Return the best available render engine identifier on this Blender build.
+
+        Probes the engine enum and prefers BLENDER_EEVEE_NEXT, then BLENDER_EEVEE,
+        then CYCLES; falls back to whatever the enum advertises first.
+        """
     items = bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items
     available = {it.identifier for it in items}
     for cand in ('BLENDER_EEVEE_NEXT', 'BLENDER_EEVEE', 'CYCLES'):
@@ -181,6 +208,12 @@ def safe_engine():
 
 
 def set_render(engine=None, resolution=(1280, 800), samples=64):
+    """Configure the active scene's render engine, resolution, and sample count.
+
+        Picks `safe_engine()` when `engine` is None. Sets samples on whichever EEVEE
+        variant exists (eevee/eevee_next) and on Cycles when active. Returns the
+        `scene.render` object.
+        """
     scene = bpy.context.scene
     r = scene.render
     r.engine = engine if engine is not None else safe_engine()
@@ -205,6 +238,11 @@ def set_render(engine=None, resolution=(1280, 800), samples=64):
 
 
 def set_world_sky(top=(0.55, 0.75, 0.95), strength=1.2):
+    """Set a flat-color sky world background using a Background shader.
+
+        Creates a world if missing, ensures a Background->Output graph, and sets the
+        color to `top` and the emission `strength`. Returns the world datablock.
+        """
     world = bpy.context.scene.world
     if world is None:
         world = bpy.data.worlds.new('SkillWorld')
@@ -233,6 +271,11 @@ def set_world_sky(top=(0.55, 0.75, 0.95), strength=1.2):
 
 
 def warm_key_light(target=(0, 0, 0), energy=5.0, color=(1.0, 0.78, 0.55)):
+    """Add a warm-toned area key light aimed at `target`.
+
+        Places a 4m area light offset (+5,-5,+6) from the target with energy scaled
+        by 100 (since area lights use watts). Returns the light object.
+        """
     data = bpy.data.lights.new('SkillKey', type='AREA')
     data.energy = energy * 100
     data.size = 4.0
@@ -246,10 +289,16 @@ def warm_key_light(target=(0, 0, 0), energy=5.0, color=(1.0, 0.78, 0.55)):
 
 
 def studio_dark_world(strength=0.3, color=(0.02, 0.02, 0.02)):
+    """Set a near-black studio backdrop world (thin wrapper over `set_world_sky`)."""
     return set_world_sky(top=color, strength=strength)
 
 
 def boolean_difference(target, cutter, apply=True, delete_cutter=True):
+    """Subtract `cutter` from `target` via a Boolean DIFFERENCE modifier.
+
+        When `apply` is True, the modifier is applied immediately and `cutter` is
+        deleted if `delete_cutter` is True. Returns the modified `target` object.
+        """
     # Adds a Boolean DIFFERENCE modifier to target; cutter is subtracted.
     mod = target.modifiers.new(name='SkillBoolean', type='BOOLEAN')
     mod.operation = 'DIFFERENCE'
@@ -266,6 +315,11 @@ def boolean_difference(target, cutter, apply=True, delete_cutter=True):
 
 
 def three_point_light(target=(0, 0, 0), key_energy=4.0):
+    """Build a classic three-point lighting rig (key/fill/back) aimed at `target`.
+
+        Key is a SUN, fill and back are AREA lights with energies derived from
+        `key_energy`. Returns a (key, fill, back) tuple of objects.
+        """
     tx, ty, tz = target
 
     key_data = bpy.data.lights.new('SkillKey', type='SUN')
@@ -302,6 +356,12 @@ def _aim_at(obj, target):
 
 def frame_camera(target=(0, 0, 0), distance=18, elevation_deg=35, azimuth_deg=45,
                  lens=35, name='SkillCamera'):
+    """Create a camera at spherical coords (`distance`, `elevation_deg`, `azimuth_deg`) around `target`.
+
+        Removes any prior cameras matching `name` (and orphan camera-data) so repeated
+        calls do not accumulate stale frusta. Sets the new camera as active scene
+        camera and points it at `target`. Returns the camera object.
+        """
     # Remove any prior skill cameras so repeated auto_frame calls don't pile up
     # stale frusta that bloat bbox computations on later inspection.
     for o in list(bpy.data.objects):
@@ -331,6 +391,12 @@ def frame_camera(target=(0, 0, 0), distance=18, elevation_deg=35, azimuth_deg=45
 
 
 def bbox_of(objects):
+    """Compute the world-space axis-aligned bbox of a list of objects.
+
+        Skips non-geometry types (cameras, lights) whose `bound_box` would distort
+        the result. Uses the evaluated depsgraph so modifiers are accounted for.
+        Returns (min_vec, max_vec) as `mathutils.Vector` pairs.
+        """
     # Cameras/lights also expose bound_box but their frusta blow up the result —
     # restrict to MESH/CURVE/SURFACE/META.
     bpy.context.view_layer.update()
@@ -360,6 +426,12 @@ def bbox_of(objects):
 
 def auto_frame(objects, padding=1.2, elevation_deg=30, azimuth_deg=45, lens=35,
                name='SkillCamera'):
+    """Frame `objects` with a new camera by computing fit distance from FOV and bbox.
+
+        Derives horizontal/vertical FOV from a 36mm sensor and `lens`, takes the
+        tighter axis, and places the camera at `padding * radius / tan(fov/2)` away.
+        Delegates the actual placement to `frame_camera`. Returns the camera object.
+        """
     bb_min, bb_max = bbox_of(objects)
     center = (bb_min + bb_max) * 0.5
     extent = (bb_max - bb_min)
@@ -384,6 +456,12 @@ def auto_frame(objects, padding=1.2, elevation_deg=30, azimuth_deg=45, lens=35,
 # ---------------------------------------------------------------------------
 
 def set_filmic_high_contrast():
+    """Apply Filmic view transform with a high-contrast look on the active scene.
+
+        Falls through alternate look identifiers ('High Contrast',
+        'Filmic - High Contrast', etc.) so it works across Blender versions.
+        Returns a dict with the resolved view_transform and look strings.
+        """
     import bpy
     vs = bpy.context.scene.view_settings
     out = {}
@@ -408,6 +486,12 @@ def set_filmic_high_contrast():
 
 
 def add_volumetric_fog(density=0.02, color=(0.7, 0.75, 0.85), anisotropy=0.0):
+    """Attach a Volume Scatter to the world's Volume output for atmospheric fog.
+
+        Creates the world if missing, links a Volume Scatter node when none is
+        present, and sets density/color/anisotropy. Also enables EEVEE volumetric
+        flags. Returns the world node tree.
+        """
     import bpy
     scene = bpy.context.scene
     world = scene.world
@@ -451,6 +535,12 @@ def add_volumetric_fog(density=0.02, color=(0.7, 0.75, 0.85), anisotropy=0.0):
 
 
 def add_camera_dof(target_obj=None, focus_distance=None, fstop=2.8, camera=None):
+    """Enable depth-of-field on a camera, focusing on `target_obj` or `focus_distance`.
+
+        Uses the active scene camera when `camera` is None. `target_obj` (when
+        provided) takes precedence over `focus_distance`. Sets `aperture_fstop`.
+        Returns the camera object, or None if no camera was found.
+        """
     import bpy
     if camera is None:
         camera = bpy.context.scene.camera
@@ -476,6 +566,12 @@ def add_camera_dof(target_obj=None, focus_distance=None, fstop=2.8, camera=None)
 
 
 def set_sunset_world(top=(0.95, 0.65, 0.40), bottom=(0.20, 0.18, 0.30), strength=0.8):
+    """Build a warm sunset world backdrop using Sky Texture, falling back to a Z-gradient.
+
+        Tries Hosek-Wilkie/Nishita/Preetham sky types first (with low sun_elevation).
+        If no sky type is available, builds a TexCoord->ColorRamp gradient between
+        `bottom` and `top`. Returns the world node tree.
+        """
     import bpy, math
     scene = bpy.context.scene
     world = scene.world
@@ -541,6 +637,12 @@ def set_sunset_world(top=(0.95, 0.65, 0.40), bottom=(0.20, 0.18, 0.30), strength
 
 
 def enable_eevee_quality():
+    """Turn on EEVEE quality flags (SSR, soft shadows, GTAO, raytracing, bloom).
+
+        Bumps `taa_render_samples` to 128 and `taa_samples` to 16 if lower, on
+        whichever EEVEE variant exists. Returns a dict reporting which attributes
+        were applied.
+        """
     import bpy
     scene = bpy.context.scene
     applied = {}
@@ -596,6 +698,13 @@ def _facing_to_z_rotation(facing):
 
 def pointed_arch_window(name, location, width, height, depth, material=None,
                         facing='-Y', frame_thickness=0.15, frame_material=None):
+    """Build a Gothic pointed-arch (lancet) window with optional frame.
+
+        Glass is an extruded pentagonal lancet profile (rectangle with triangular
+        apex) facing the given direction. When `frame_material` is set, a slightly
+        larger frame slab is added with the glass profile boolean-cut from it.
+        Returns (glass_obj, frame_obj_or_None).
+        """
     w = float(width)
     h = float(height)
     d = float(depth)
@@ -659,6 +768,12 @@ def pointed_arch_window(name, location, width, height, depth, material=None,
 
 def crenellate_line(name_prefix, p0, p1, z_top, material=None,
                     merlon_w=0.4, merlon_h=0.7, merlon_t=0.4, gap=0.4):
+    """Place a row of merlons (crenellation cubes) along the segment p0->p1 at height `z_top`.
+
+        Spaces merlons of width `merlon_w` (depth `merlon_t`, height `merlon_h`) by
+        `gap`, centered on the segment, and yaws each cube to align with the
+        direction. Returns the list of created cube objects.
+        """
     p0v = mathutils.Vector((float(p0[0]), float(p0[1])))
     p1v = mathutils.Vector((float(p1[0]), float(p1[1])))
     direction = p1v - p0v
@@ -691,6 +806,12 @@ def crenellate_line(name_prefix, p0, p1, z_top, material=None,
 
 def flying_buttress(name, anchor_low, anchor_high, thickness=0.4, material=None,
                     segments=8):
+    """Build a flying-buttress arch as a thickened quadratic Bezier ribbon.
+
+        The Bezier is sampled at `segments+1` points between `anchor_low` and
+        `anchor_high` with a control point lifted above midpoint. The ribbon is
+        extruded along Z by `thickness` to give volume. Returns the buttress object.
+        """
     p_low = mathutils.Vector((float(anchor_low[0]), float(anchor_low[1]), float(anchor_low[2])))
     p_high = mathutils.Vector((float(anchor_high[0]), float(anchor_high[1]), float(anchor_high[2])))
     seg = max(int(segments), 2)
@@ -746,6 +867,12 @@ def flying_buttress(name, anchor_low, anchor_high, thickness=0.4, material=None,
 
 def low_poly_tree(name, location, height=4.0, trunk_radius=0.18,
                   leaf_color=(0.18, 0.45, 0.20), trunk_color=(0.30, 0.18, 0.08)):
+    """Build a low-poly conifer (cylinder trunk + 3 stacked cones) parented to an empty.
+
+        Re-uses cached 'TreeTrunk' and 'TreeLeaves' materials if present, otherwise
+        creates them from `trunk_color` and `leaf_color`. Returns the empty root
+        so callers can transform the whole tree atomically.
+        """
     trunk_mat = bpy.data.materials.get('TreeTrunk')
     if trunk_mat is None:
         trunk_mat = mat('TreeTrunk', (trunk_color[0], trunk_color[1], trunk_color[2], 1.0),
@@ -793,6 +920,12 @@ def low_poly_tree(name, location, height=4.0, trunk_radius=0.18,
 
 
 def add_gargoyle(name, location, facing='+X', material=None, scale=0.5):
+    """Build a stylized gargoyle (body, head, ears, tail, four legs) parented to an empty.
+
+        Children are placed at LOCAL offsets around the empty's origin so the parent
+        transform does not double their world position. The empty is then yawed by
+        `facing` and placed at `location`. Returns the empty root object.
+        """
     # Build all children at LOCAL offsets around origin, then translate the root.
     # Doing it the other way (placing children at world coords AND parenting to a
     # root at the same world coords) doubles their position via parent transform.
@@ -868,6 +1001,12 @@ def add_gargoyle(name, location, facing='+X', material=None, scale=0.5):
 
 def chain_between(name_prefix, p_start, p_end, link_count=8, link_radius=0.08,
                   material=None):
+    """String `link_count` torus links along the line from `p_start` to `p_end`.
+
+        Every other link is rotated 90deg around the chain axis to interlock. Each
+        torus is named `{name_prefix}_NN` and given `material`. Returns the list of
+        created torus objects.
+        """
     p0 = mathutils.Vector((float(p_start[0]), float(p_start[1]), float(p_start[2])))
     p1 = mathutils.Vector((float(p_end[0]), float(p_end[1]), float(p_end[2])))
     direction = p1 - p0
@@ -898,6 +1037,12 @@ def chain_between(name_prefix, p_start, p_end, link_count=8, link_radius=0.08,
 
 def flag_banner(name, location, width=0.8, height=1.2,
                 color=(0.7, 0.08, 0.08), pole_height=2.0):
+    """Build a vertical pole with a fishtail-pentagon banner attached.
+
+        Creates a metallic pole and a thin extruded pentagon banner colored by
+        `color`. Materials are cached as 'BannerPole' and 'Banner_{name}'.
+        Returns (pole_obj, banner_obj).
+        """
     lx, ly, lz = float(location[0]), float(location[1]), float(location[2])
 
     pole_mat = bpy.data.materials.get('BannerPole')
@@ -990,6 +1135,12 @@ def _proc_rgba(c):
 
 def procedural_stone(name, base=(0.45, 0.42, 0.38), variation=0.15,
                      bumpiness=0.3, mortar_dark=0.5):
+    """Build a procedural stone-with-mortar material via Voronoi + noise.
+
+        Voronoi distance drives a mortar mask; noise gives per-stone color variation
+        and bump. `mortar_dark` darkens the mortar lines, `bumpiness` controls bump
+        strength. Returns the material datablock.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1073,6 +1224,11 @@ def procedural_stone(name, base=(0.45, 0.42, 0.38), variation=0.15,
 
 
 def procedural_slate_tiles(name, base=(0.10, 0.11, 0.15), tile_scale=8.0):
+    """Build a procedural slate-roof-tile material via a Brick texture + noise bump.
+
+        `tile_scale` controls the brick density; bricks alternate between `base`
+        and a 15%-darker variant with thin dark mortar. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1123,6 +1279,11 @@ def procedural_slate_tiles(name, base=(0.10, 0.11, 0.15), tile_scale=8.0):
 
 
 def procedural_wood(name, base=(0.30, 0.18, 0.08), grain_scale=12.0):
+    """Build a procedural wood material via a banded Wave texture multiplied with noise.
+
+        Wave bands at `grain_scale` produce light/dark grain; noise modulates the
+        color (multiply) and adds subtle bump. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1186,6 +1347,11 @@ def procedural_wood(name, base=(0.30, 0.18, 0.08), grain_scale=12.0):
 
 
 def procedural_grass(name, base=(0.18, 0.34, 0.12), variation=0.10):
+    """Build a procedural ground-grass material via two-scale noise driving a color ramp.
+
+        Fine + large noise blended into a ColorRamp around `base +/- variation`.
+        Roughness is fixed at 0.95 (matte). Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1233,6 +1399,11 @@ def procedural_grass(name, base=(0.18, 0.34, 0.12), variation=0.10):
 
 
 def procedural_dirt_path(name, base=(0.30, 0.22, 0.14), gravel_scale=20.0):
+    """Build a procedural dirt/gravel path material via Voronoi gravel + noise base.
+
+        Voronoi at `gravel_scale` adds gravel highlights, broad noise modulates the
+        base earth color. Bump combines both. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1296,6 +1467,11 @@ def procedural_dirt_path(name, base=(0.30, 0.22, 0.14), gravel_scale=20.0):
 
 
 def procedural_water(name, base=(0.02, 0.07, 0.12), wave_scale=6.0):
+    """Build a procedural water surface material with low roughness, transmission, and noise bump.
+
+        Single noise at `wave_scale` drives a small bump for ripples; transmission
+        is enabled when the BSDF supports it. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1331,6 +1507,12 @@ def procedural_water(name, base=(0.02, 0.07, 0.12), wave_scale=6.0):
 
 def procedural_metal_aged(name, base=(0.7, 0.55, 0.25), patina=(0.18, 0.35, 0.30),
                           patina_amount=0.4):
+    """Build an aged-metal material that mixes `base` metal with `patina` corrosion.
+
+        A noise-driven mask interpolates color/metallic/roughness between bare
+        metal (high metallic, low roughness) and patina (low metallic, higher
+        roughness). `patina_amount` controls the mask threshold. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1392,6 +1574,11 @@ def procedural_metal_aged(name, base=(0.7, 0.55, 0.25), patina=(0.18, 0.35, 0.30
 
 
 def procedural_canvas_flag(name, base=(0.7, 0.08, 0.08), wear=0.3):
+    """Build a procedural cloth/canvas material for banners with weave + wear noise.
+
+        Voronoi simulates fine weave specks; noise adds wear. `wear` modulates how
+        much wear darkens the base color. Returns the material.
+        """
     m, nt, bsdf, out = _proc_init(name)
 
     tex = nt.nodes.new('ShaderNodeTexCoord')
@@ -1899,6 +2086,10 @@ import os as _anim_os
 
 
 def set_animation_range(start=1, end=120, fps=24):
+    """Set the active scene's frame range and FPS, and rewind to `start`.
+
+        Returns (start, end, fps) as a tuple of ints.
+        """
     scene = bpy.context.scene
     scene.frame_start = int(start)
     scene.frame_end = int(end)
@@ -1909,6 +2100,14 @@ def set_animation_range(start=1, end=120, fps=24):
 
 def keyframe_camera_path(camera, keyframes, look_at_per_key=None,
                          lens_per_key=None, interpolation='BEZIER'):
+    """Insert location (and optional rotation/lens) keyframes for a camera path.
+
+        `keyframes` is a list of (frame, (x,y,z)). When `look_at_per_key` is given,
+        each key also keys rotation aiming at that point. Optional `lens_per_key`
+        keys the focal length. All keyframes get `interpolation` (default BEZIER)
+        with auto-clamped handles. Handles Blender 5.x slotted actions.
+        Returns the camera object.
+        """
     scene = bpy.context.scene
     cam = camera if camera is not None else scene.camera
     if cam is None:
@@ -1966,6 +2165,12 @@ def keyframe_camera_path(camera, keyframes, look_at_per_key=None,
 def render_animation_frames(output_dir, frame_start, frame_end,
                             file_prefix='frame_', resolution=None,
                             samples=None, file_format='PNG'):
+    """Render frames `frame_start..frame_end` (inclusive) to `output_dir`.
+
+        Optionally overrides resolution and sample count before rendering. Files are
+        named `{file_prefix}NNNN.{ext}` where ext follows `file_format` (PNG/JPEG/
+        OPEN_EXR/TIFF). Returns the list of written file paths.
+        """
     scene = bpy.context.scene
     _anim_os.makedirs(output_dir, exist_ok=True)
 
@@ -2006,6 +2211,12 @@ def render_animation_frames(output_dir, frame_start, frame_end,
 
 def bezier_orbit_keyframes(center, radius, height, n_samples=8,
                            frame_start=1, frame_end=120, ccw=True):
+    """Generate orbital camera keyframes circling `center` at `radius` and `height`.
+
+        Produces `n_samples` waypoints evenly spaced in angle (CCW or CW per `ccw`)
+        over the frame span [frame_start, frame_end], with look-at points all set to
+        `center`. Returns (keyframes, look_at_points) suitable for `keyframe_camera_path`.
+        """
     cx = float(center[0])
     cy = float(center[1])
     cz = float(center[2])
@@ -2214,8 +2425,12 @@ def import_obj(filepath, name=None):
         Non-idempotent — repeated calls with the same filepath produce duplicate
         objects with .001 suffixes from Blender.
     """
+    import os as _os_io
+    fp = _os_io.path.expanduser(filepath).replace('\\', '/')
+    if not _os_io.path.exists(fp):
+        raise FileNotFoundError("import_obj: file not found: {}".format(fp))
     pre = set(bpy.data.objects)
-    bpy.ops.wm.obj_import(filepath=filepath)
+    bpy.ops.wm.obj_import(filepath=fp)
     new_objs = [o for o in bpy.data.objects if o not in pre]
     mesh_objs = [o for o in new_objs if o.type == 'MESH']
     # delete non-mesh imports
@@ -2223,7 +2438,7 @@ def import_obj(filepath, name=None):
         if o.type != 'MESH':
             bpy.data.objects.remove(o, do_unlink=True)
     if not mesh_objs:
-        raise RuntimeError("import_obj: no mesh objects found in {}".format(filepath))
+        raise RuntimeError("import_obj: no mesh objects found in {}".format(fp))
     for o in bpy.context.scene.objects:
         o.select_set(False)
     active = mesh_objs[0]
@@ -2253,8 +2468,12 @@ def import_fbx(filepath, name=None):
     Note:
         Non-idempotent — repeated imports add new copies with suffixes.
     """
+    import os as _os_io
+    fp = _os_io.path.expanduser(filepath).replace('\\', '/')
+    if not _os_io.path.exists(fp):
+        raise FileNotFoundError("import_fbx: file not found: {}".format(fp))
     pre = set(bpy.data.objects)
-    bpy.ops.import_scene.fbx(filepath=filepath)
+    bpy.ops.import_scene.fbx(filepath=fp)
     new_objs = [o for o in bpy.data.objects if o not in pre]
     tops = [o for o in new_objs if o.parent is None]
     if name is not None and len(tops) == 1:

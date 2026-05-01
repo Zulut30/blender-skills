@@ -2177,3 +2177,1260 @@ def bird_flight_keyframes(camera, plan, interpolation='BEZIER'):
                 kp.handle_right_type = 'AUTO_CLAMPED'
                 kp.interpolation = interpolation
     return camera
+
+
+# === Asset import & cleanup pipeline (v1.5.0) ===
+
+def import_obj(filepath, name=None):
+    """Import an .obj file and join all imported mesh objects into one.
+
+    Uses bpy.ops.wm.obj_import (Blender 3.3+ new importer). All imported mesh
+    objects are joined into a single object; non-mesh imports are deleted.
+
+    Args:
+        filepath (str): Absolute path to .obj file.
+        name (str | None): If given, rename the joined mesh + datablock.
+
+    Returns:
+        bpy.types.Object: The joined mesh object.
+
+    Note:
+        Non-idempotent — repeated calls with the same filepath produce duplicate
+        objects with .001 suffixes from Blender.
+    """
+    pre = set(bpy.data.objects)
+    bpy.ops.wm.obj_import(filepath=filepath)
+    new_objs = [o for o in bpy.data.objects if o not in pre]
+    mesh_objs = [o for o in new_objs if o.type == 'MESH']
+    # delete non-mesh imports
+    for o in new_objs:
+        if o.type != 'MESH':
+            bpy.data.objects.remove(o, do_unlink=True)
+    if not mesh_objs:
+        raise RuntimeError("import_obj: no mesh objects found in {}".format(filepath))
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    active = mesh_objs[0]
+    for o in mesh_objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = active
+    if len(mesh_objs) > 1:
+        bpy.ops.object.join()
+    joined = bpy.context.view_layer.objects.active
+    if name is not None:
+        joined.name = name
+        joined.data.name = name
+    return joined
+
+
+def import_fbx(filepath, name=None):
+    """Import an .fbx file and return top-level imported objects.
+
+    Args:
+        filepath (str): Absolute path to .fbx file.
+        name (str | None): If given and exactly one top-level object exists,
+            rename it (and its data, if applicable).
+
+    Returns:
+        list: Newly imported objects whose `parent` is None.
+
+    Note:
+        Non-idempotent — repeated imports add new copies with suffixes.
+    """
+    pre = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=filepath)
+    new_objs = [o for o in bpy.data.objects if o not in pre]
+    tops = [o for o in new_objs if o.parent is None]
+    if name is not None and len(tops) == 1:
+        tops[0].name = name
+        if hasattr(tops[0], 'data') and tops[0].data is not None:
+            try:
+                tops[0].data.name = name
+            except Exception:
+                pass
+    return tops
+
+
+def normalize_imported(obj):
+    """Recenter origin, apply rotation+scale, merge doubles, recalc normals.
+
+    Used to clean up freshly-imported assets so they behave predictably under
+    further operations.
+
+    Args:
+        obj (bpy.types.Object): Mesh object to normalize.
+
+    Returns:
+        None.
+    """
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    if obj.type == 'MESH':
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(obj.data)
+        bm.free()
+        obj.data.update()
+
+
+def cleanup_materials(obj):
+    """Deduplicate material slots that share a common base name.
+
+    Groups materials by base name (the part before any `.001`/`.002` numeric
+    suffix); for each group, keeps a single canonical material and replaces
+    references to its duplicates in `obj.data.materials` with that canonical
+    reference. Empty trailing slots are collapsed.
+
+    Args:
+        obj (bpy.types.Object): Mesh object whose material slots are cleaned.
+
+    Returns:
+        int: Number of duplicate materials removed from the object's slots.
+    """
+    import re
+    if obj.data is None or not hasattr(obj.data, 'materials'):
+        return 0
+    mats = obj.data.materials
+    base_re = re.compile(r'^(.*?)(?:\.\d{3,})?$')
+    canonical = {}
+    keep_mats = []
+    removed = 0
+    for m in list(mats):
+        if m is None:
+            continue
+        match = base_re.match(m.name)
+        base = match.group(1) if match else m.name
+        if base in canonical:
+            removed += 1
+        else:
+            canonical[base] = m
+            keep_mats.append(m)
+    # Rebuild slots
+    while len(mats) > 0:
+        mats.pop(index=0)
+    for m in keep_mats:
+        mats.append(m)
+    return removed
+
+
+def decimate_mesh(obj, ratio=0.5):
+    """Apply a Decimate (collapse) modifier in place.
+
+    Args:
+        obj (bpy.types.Object): Mesh to decimate.
+        ratio (float): Collapse ratio in (0, 1]. Values below 0.1 are risky
+            (may destroy topology / shading — pitfall 32).
+
+    Returns:
+        None.
+    """
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    mod = obj.modifiers.new(name='Decimate', type='DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.ratio = ratio
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
+def auto_bevel(obj, width=0.02, segments=2):
+    """Apply an angle-limited bevel modifier in place.
+
+    Args:
+        obj (bpy.types.Object): Mesh to bevel.
+        width (float): Bevel width in object units.
+        segments (int): Number of bevel segments.
+
+    Returns:
+        None.
+    """
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    mod = obj.modifiers.new(name='Bevel', type='BEVEL')
+    mod.width = width
+    mod.segments = segments
+    mod.limit_method = 'ANGLE'
+    mod.angle_limit = math.radians(30)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+
+# === Geometry nodes helpers (v1.5.0) ===
+
+def gn_scatter_on_surface(target_obj, instance_obj, density=5.0, seed=0,
+                          name='GN_Scatter'):
+    """Scatter instances of `instance_obj` over the surface of `target_obj`.
+
+    Builds a Geometry Nodes group via `bpy.data.node_groups.new` (Pitfall 29 —
+    must NOT use operators) and attaches it as a NODES modifier on `target_obj`.
+
+    Args:
+        target_obj (bpy.types.Object): Surface mesh to scatter onto.
+        instance_obj (bpy.types.Object): Object whose geometry is instanced.
+        density (float): Distribute Points density (per unit area).
+        seed (int): Random seed for distribution.
+        name (str): Name for the new node group.
+
+    Returns:
+        bpy.types.Object: `target_obj` (with the modifier attached).
+
+    Note:
+        Non-idempotent — each call appends a new modifier and node group
+        (the group name may collect `.001` suffixes).
+    """
+    ng = bpy.data.node_groups.new(name, 'GeometryNodeTree')
+    # Interface: Geometry in/out
+    ng.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
+    ng.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
+
+    nodes = ng.nodes
+    links = ng.links
+    n_in = nodes.new('NodeGroupInput')
+    n_in.location = (-600, 0)
+    n_out = nodes.new('NodeGroupOutput')
+    n_out.location = (600, 0)
+
+    n_dist = nodes.new('GeometryNodeDistributePointsOnFaces')
+    n_dist.location = (-380, 80)
+    n_dist.distribute_method = 'RANDOM'
+    if 'Density' in n_dist.inputs:
+        n_dist.inputs['Density'].default_value = density
+    if 'Seed' in n_dist.inputs:
+        n_dist.inputs['Seed'].default_value = seed
+
+    n_objinfo = nodes.new('GeometryNodeObjectInfo')
+    n_objinfo.location = (-380, -200)
+    n_objinfo.inputs['Object'].default_value = instance_obj
+
+    n_iop = nodes.new('GeometryNodeInstanceOnPoints')
+    n_iop.location = (-100, 0)
+
+    n_join = nodes.new('GeometryNodeJoinGeometry')
+    n_join.location = (260, 0)
+
+    links.new(n_in.outputs[0], n_dist.inputs['Mesh'])
+    links.new(n_dist.outputs['Points'], n_iop.inputs['Points'])
+    links.new(n_objinfo.outputs['Geometry'], n_iop.inputs['Instance'])
+    links.new(n_iop.outputs['Instances'], n_join.inputs[0])
+    links.new(n_in.outputs[0], n_join.inputs[0])
+    links.new(n_join.outputs[0], n_out.inputs[0])
+
+    mod = target_obj.modifiers.new(name='GN_Scatter', type='NODES')
+    mod.node_group = ng
+    return target_obj
+
+
+def gn_array_along_curve(obj, curve_obj, count=10, name='GN_ArrayCurve'):
+    """Array instances of `obj` evenly along `curve_obj`.
+
+    Creates a new empty mesh container object that carries a Nodes modifier:
+    a MeshLine of `count` points is replaced (via Curve to Points sampling
+    `curve_obj`) and `obj` is instanced on those points.
+
+    Args:
+        obj (bpy.types.Object): Object to instance along the curve.
+        curve_obj (bpy.types.Object): Curve providing the path.
+        count (int): Number of instances.
+        name (str): Name for both container object and node group.
+
+    Returns:
+        bpy.types.Object: The new container object holding the modifier.
+
+    Note:
+        Non-idempotent — every call creates a new container object.
+    """
+    me = bpy.data.meshes.new(name)
+    container = bpy.data.objects.new(name, me)
+    container.name = name
+    container.data.name = name
+    bpy.context.scene.collection.objects.link(container)
+
+    ng = bpy.data.node_groups.new(name, 'GeometryNodeTree')
+    ng.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
+    ng.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
+    nodes = ng.nodes
+    links = ng.links
+    n_in = nodes.new('NodeGroupInput')
+    n_in.location = (-700, 0)
+    n_out = nodes.new('NodeGroupOutput')
+    n_out.location = (700, 0)
+
+    n_curve_info = nodes.new('GeometryNodeObjectInfo')
+    n_curve_info.location = (-500, 200)
+    n_curve_info.inputs['Object'].default_value = curve_obj
+
+    n_c2p = nodes.new('GeometryNodeCurveToPoints')
+    n_c2p.location = (-260, 200)
+    n_c2p.mode = 'COUNT'
+    if 'Count' in n_c2p.inputs:
+        n_c2p.inputs['Count'].default_value = count
+
+    n_obj_info = nodes.new('GeometryNodeObjectInfo')
+    n_obj_info.location = (-260, -200)
+    n_obj_info.inputs['Object'].default_value = obj
+
+    n_iop = nodes.new('GeometryNodeInstanceOnPoints')
+    n_iop.location = (60, 0)
+
+    links.new(n_curve_info.outputs['Geometry'], n_c2p.inputs['Curve'])
+    links.new(n_c2p.outputs['Points'], n_iop.inputs['Points'])
+    links.new(n_obj_info.outputs['Geometry'], n_iop.inputs['Instance'])
+    links.new(n_iop.outputs['Instances'], n_out.inputs[0])
+
+    mod = container.modifiers.new(name='GN_ArrayCurve', type='NODES')
+    mod.node_group = ng
+    return container
+
+
+def gn_random_transform(obj, loc_range=0.1, rot_range=15.0, scale_range=0.2,
+                        seed=0):
+    """Add a Geometry Nodes modifier that randomizes per-instance transforms.
+
+    Adds a separate NODES modifier whose tree applies random translate, rotate,
+    and scale offsets to instances on the input geometry. Intended to be
+    stacked AFTER an instancing modifier.
+
+    Args:
+        obj (bpy.types.Object): Object that already produces instances.
+        loc_range (float): +/- world-units random translation per axis.
+        rot_range (float): +/- degrees random rotation per axis.
+        scale_range (float): +/- random scale offset per axis (added to 1.0).
+        seed (int): Random seed.
+
+    Returns:
+        None.
+
+    Note:
+        Non-idempotent — each call adds a new modifier.
+    """
+    rot_rad = math.radians(rot_range)
+    ng = bpy.data.node_groups.new('GN_RandomTransform', 'GeometryNodeTree')
+    ng.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
+    ng.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
+    nodes = ng.nodes
+    links = ng.links
+    n_in = nodes.new('NodeGroupInput')
+    n_in.location = (-900, 0)
+    n_out = nodes.new('NodeGroupOutput')
+    n_out.location = (900, 0)
+
+    def _rand_vec(name, lo, hi, sd):
+        rv = nodes.new('FunctionNodeRandomValue')
+        rv.label = name
+        rv.data_type = 'FLOAT_VECTOR'
+        # Min/Max sockets at indices 0/1 for FLOAT_VECTOR mode
+        try:
+            rv.inputs[0].default_value = (lo, lo, lo)
+            rv.inputs[1].default_value = (hi, hi, hi)
+        except Exception:
+            pass
+        # Seed input — find by name
+        if 'Seed' in rv.inputs:
+            rv.inputs['Seed'].default_value = sd
+        return rv
+
+    n_rv_loc = _rand_vec('LocRand', -loc_range, loc_range, seed)
+    n_rv_loc.location = (-650, 250)
+    n_rv_rot = _rand_vec('RotRand', -rot_rad, rot_rad, seed + 1)
+    n_rv_rot.location = (-650, 0)
+    n_rv_sca = _rand_vec('ScaleRand', 1.0 - scale_range, 1.0 + scale_range, seed + 2)
+    n_rv_sca.location = (-650, -250)
+
+    n_translate = nodes.new('GeometryNodeTranslateInstances')
+    n_translate.location = (-300, 250)
+    n_rotate = nodes.new('GeometryNodeRotateInstances')
+    n_rotate.location = (0, 0)
+    n_scale = nodes.new('GeometryNodeScaleInstances')
+    n_scale.location = (300, -250)
+
+    links.new(n_in.outputs[0], n_translate.inputs['Instances'])
+    if 'Translation' in n_translate.inputs:
+        links.new(n_rv_loc.outputs[0], n_translate.inputs['Translation'])
+    links.new(n_translate.outputs['Instances'], n_rotate.inputs['Instances'])
+    if 'Rotation' in n_rotate.inputs:
+        links.new(n_rv_rot.outputs[0], n_rotate.inputs['Rotation'])
+    links.new(n_rotate.outputs['Instances'], n_scale.inputs['Instances'])
+    if 'Scale' in n_scale.inputs:
+        links.new(n_rv_sca.outputs[0], n_scale.inputs['Scale'])
+    links.new(n_scale.outputs['Instances'], n_out.inputs[0])
+
+    mod = obj.modifiers.new(name='GN_RandomTransform', type='NODES')
+    mod.node_group = ng
+
+
+# === Vegetation & environment scattering (v1.5.0) ===
+
+def scatter_rocks(ground_obj, count=30, size_range=(0.1, 0.5), seed=42,
+                  material=None):
+    """Scatter randomly-sized icosphere rocks over a ground mesh.
+
+    Picks random XY samples within `ground_obj`'s world bounding box and
+    raycasts downward in object-local space to land each rock on the surface.
+    Each rock receives a random rotation and scale within `size_range`.
+
+    Args:
+        ground_obj (bpy.types.Object): Mesh to land rocks on.
+        count (int): Number of rocks to place.
+        size_range (tuple[float, float]): (min, max) random scale for each rock.
+        seed (int): Random seed.
+        material (bpy.types.Material | None): Material for all rocks. Defaults
+            to `procedural_stone('RockStone')`.
+
+    Returns:
+        list[bpy.types.Object]: The created rock objects.
+
+    Note:
+        Non-idempotent — repeated calls add more rocks.
+    """
+    import random
+    random.seed(seed)
+    if material is None:
+        material = procedural_stone('RockStone')
+
+    bb = [ground_obj.matrix_world @ mathutils.Vector(c) for c in ground_obj.bound_box]
+    xs = [v.x for v in bb]; ys = [v.y for v in bb]; zs = [v.z for v in bb]
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    z_top = max(zs) + 10.0
+    z_bot = min(zs) - 10.0
+
+    mw = ground_obj.matrix_world
+    mwi = mw.inverted()
+
+    rocks = []
+    for i in range(count):
+        wx = random.uniform(xmin, xmax)
+        wy = random.uniform(ymin, ymax)
+        # Cast ray downward in local space
+        origin_local = mwi @ mathutils.Vector((wx, wy, z_top))
+        dir_local = (mwi @ mathutils.Vector((wx, wy, z_bot))) - origin_local
+        if dir_local.length == 0:
+            continue
+        dir_local.normalize()
+        try:
+            hit, loc_local, _normal, _idx = ground_obj.ray_cast(origin_local, dir_local)
+        except Exception:
+            hit = False
+        if hit:
+            world_pos = mw @ loc_local
+        else:
+            world_pos = mathutils.Vector((wx, wy, (min(zs) + max(zs)) * 0.5))
+
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1, location=world_pos)
+        r = bpy.context.object
+        s = random.uniform(size_range[0], size_range[1])
+        sx = s * random.uniform(0.85, 1.15)
+        sy = s * random.uniform(0.85, 1.15)
+        sz = s * random.uniform(0.6, 1.0)
+        r.scale = (sx, sy, sz)
+        r.rotation_euler = (
+            random.uniform(0, math.tau),
+            random.uniform(0, math.tau),
+            random.uniform(0, math.tau),
+        )
+        r.name = 'Rock_{:03d}'.format(i)
+        r.data.name = r.name
+        _apply_scale(r)
+        _assign_material(r, material)
+        rocks.append(r)
+    return rocks
+
+
+def scatter_grass_tufts(ground_obj, count=200, height_range=(0.1, 0.3), seed=0):
+    """Build a single mesh of `count` grass tufts (3 crossed quads each) on a
+    ground surface.
+
+    Each tuft is built from three quads rotated 60 degrees apart around Z and
+    placed at a random surface point of `ground_obj` (sampled in its XY
+    bounding box, raycast in local space). All tufts are baked into ONE mesh
+    for efficiency.
+
+    Args:
+        ground_obj (bpy.types.Object): Surface to scatter onto.
+        count (int): Number of tufts. Cap at 300 in one call (Pitfall 31:
+            very high counts make a single bmesh slow).
+        height_range (tuple[float, float]): (min, max) tuft height.
+        seed (int): Random seed.
+
+    Returns:
+        bpy.types.Object: The single grass-tufts mesh object.
+
+    Note:
+        Non-idempotent — each call creates a new GrassTufts mesh.
+    """
+    import random
+    random.seed(seed)
+    if count > 300:
+        count = 300
+
+    bb = [ground_obj.matrix_world @ mathutils.Vector(c) for c in ground_obj.bound_box]
+    xs = [v.x for v in bb]; ys = [v.y for v in bb]; zs = [v.z for v in bb]
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    z_top = max(zs) + 10.0
+    z_bot = min(zs) - 10.0
+    mw = ground_obj.matrix_world
+    mwi = mw.inverted()
+
+    bm = bmesh.new()
+    for _i in range(count):
+        wx = random.uniform(xmin, xmax)
+        wy = random.uniform(ymin, ymax)
+        origin_local = mwi @ mathutils.Vector((wx, wy, z_top))
+        dir_local = (mwi @ mathutils.Vector((wx, wy, z_bot))) - origin_local
+        if dir_local.length == 0:
+            continue
+        dir_local.normalize()
+        try:
+            hit, loc_local, _normal, _idx = ground_obj.ray_cast(origin_local, dir_local)
+        except Exception:
+            hit = False
+        if hit:
+            world_pos = mw @ loc_local
+        else:
+            world_pos = mathutils.Vector((wx, wy, (min(zs) + max(zs)) * 0.5))
+        h = random.uniform(height_range[0], height_range[1])
+        w = h * 0.4
+        base_yaw = random.uniform(0, math.tau)
+        for k in range(3):
+            yaw = base_yaw + k * (math.tau / 3.0)
+            cy, sy_ = math.cos(yaw), math.sin(yaw)
+            half = w * 0.5
+            # Quad corners in plane local frame (X=horizontal, Z=vertical)
+            corners_local = [
+                (-half, 0, 0),
+                ( half, 0, 0),
+                ( half, 0, h),
+                (-half, 0, h),
+            ]
+            verts = []
+            for (lx, ly, lz) in corners_local:
+                rx = lx * cy - ly * sy_
+                ry = lx * sy_ + ly * cy
+                vx = world_pos.x + rx
+                vy = world_pos.y + ry
+                vz = world_pos.z + lz
+                verts.append(bm.verts.new((vx, vy, vz)))
+            bm.faces.new(verts)
+
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    me = bpy.data.meshes.new('GrassTufts')
+    bm.to_mesh(me)
+    bm.free()
+    obj = bpy.data.objects.new('GrassTufts', me)
+    obj.name = 'GrassTufts'
+    obj.data.name = 'GrassTufts'
+    bpy.context.scene.collection.objects.link(obj)
+    _assign_material(obj, procedural_grass('GrassTuft'))
+    return obj
+
+
+def add_tree_cluster(center, count=5, radius=8.0, height_range=(3.0, 7.0),
+                     seed=0):
+    """Place `count` low-poly trees in a jittered ring around `center`.
+
+    Args:
+        center (tuple[float, float, float]): World-space center.
+        count (int): Number of trees.
+        radius (float): Mean ring radius. Each tree's radius is jittered +/-30%.
+        height_range (tuple[float, float]): (min, max) tree height.
+        seed (int): Random seed.
+
+    Returns:
+        list[bpy.types.Object]: Root Empties of the created trees.
+
+    Note:
+        Non-idempotent — each call adds a new cluster.
+    """
+    import random
+    random.seed(seed)
+    cx, cy, cz = center
+    trees = []
+    for i in range(count):
+        ang = (i / max(count, 1)) * math.tau + random.uniform(-0.3, 0.3)
+        r = radius * random.uniform(0.7, 1.3)
+        x = cx + math.cos(ang) * r
+        y = cy + math.sin(ang) * r
+        h = random.uniform(height_range[0], height_range[1])
+        trunk_r = 0.12 + 0.06 * (h / max(height_range[1], 1e-3))
+        try:
+            t = low_poly_tree('Tree_{:03d}'.format(i), (x, y, cz), height=h,
+                              trunk_radius=trunk_r)
+        except TypeError:
+            t = low_poly_tree('Tree_{:03d}'.format(i), (x, y, cz), height=h)
+        trees.append(t)
+    return trees
+
+
+# === Cloth & soft-surface (v1.5.0) ===
+
+def add_curtain(name, location, width=1.2, height=2.4, segments_x=6,
+                segments_y=12, material=None, wave_amplitude=0.08):
+    """Subdivided vertical-plane curtain with a sinusoidal wave that grows
+    toward the bottom.
+
+    A plane is created, rotated 90 degrees about X (so it stands vertically),
+    sized to width x height, scale applied, then per-vertex deformed in X by
+    `dx = wave_amplitude * sin(local_v * 2pi) * (1 - local_u)` where local_u is
+    the height parameter (0 at top, 1 at bottom).
+
+    Args:
+        name (str): Object + data name.
+        location (tuple[float, float, float]): World-space placement.
+        width (float): Curtain width along local Y after rotation.
+        height (float): Curtain height along local Z after rotation.
+        segments_x (int): Subdivisions across width.
+        segments_y (int): Subdivisions along height.
+        material (bpy.types.Material | None): Defaults to
+            `procedural_canvas_flag(name+'_M', base=(0.55, 0.20, 0.15))`.
+        wave_amplitude (float): Peak X displacement at the bottom.
+
+    Returns:
+        bpy.types.Object: The curtain mesh.
+    """
+    bpy.ops.mesh.primitive_plane_add(location=location)
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = name
+    # Subdivide
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    cuts = max(segments_x, segments_y)
+    bpy.ops.mesh.subdivide(number_cuts=cuts)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    # Rotate vertical and size
+    obj.rotation_euler = (math.radians(90), 0, 0)
+    obj.scale = (width * 0.5, height * 0.5, 1.0)
+    # Apply rotation+scale so vertex coords are in final shape
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
+    # Bounds (post-apply) along Y (width) and Z (height)
+    ys = [v.co.y for v in obj.data.vertices]
+    zs = [v.co.z for v in obj.data.vertices]
+    ymin, ymax = min(ys), max(ys)
+    zmin, zmax = min(zs), max(zs)
+    yspan = max(ymax - ymin, 1e-6)
+    zspan = max(zmax - zmin, 1e-6)
+    for v in obj.data.vertices:
+        local_v = (v.co.y - ymin) / yspan          # along width
+        local_u = 1.0 - (v.co.z - zmin) / zspan    # 0 at top, 1 at bottom
+        dx = wave_amplitude * math.sin(local_v * math.tau) * (1.0 - local_u)
+        # Strongest at bottom -> use local_u directly as multiplier
+        dx = wave_amplitude * math.sin(local_v * math.tau) * local_u
+        v.co.x += dx
+    obj.data.update()
+
+    if material is None:
+        material = procedural_canvas_flag(name + '_M', base=(0.55, 0.20, 0.15))
+    _assign_material(obj, material)
+    return obj
+
+
+def add_rug(name, location, size_x=2.0, size_y=3.0, thickness=0.04,
+            color=(0.6, 0.2, 0.1)):
+    """Subdivided rug plane with small per-vertex Z noise for fabric look.
+
+    Args:
+        name (str): Object + data name.
+        location (tuple[float, float, float]): World-space placement.
+        size_x (float): X extent.
+        size_y (float): Y extent.
+        thickness (float): Used to scale random Z perturbation (+/- 0.3*thickness).
+        color (tuple): Base RGB.
+
+    Returns:
+        bpy.types.Object: The rug mesh.
+    """
+    import random
+    bpy.ops.mesh.primitive_plane_add(location=location)
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = name
+    obj.scale = (size_x * 0.5, size_y * 0.5, 1.0)
+    _apply_scale(obj)
+    # Subdivide ~12 cuts
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.subdivide(number_cuts=12)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    rng = random.Random(hash(name) & 0xFFFFFFFF)
+    amp = thickness * 0.3
+    for v in obj.data.vertices:
+        v.co.z += rng.uniform(-amp, amp)
+    obj.data.update()
+    _assign_material(obj, mat(name + '_M', color, roughness=0.95))
+    return obj
+
+
+# === Interior & room (v1.5.0) ===
+
+def build_room_box(name_prefix, width, depth, height, wall_thickness=0.2,
+                   material=None):
+    """Build a closed box room (floor + ceiling + 4 solid walls).
+
+    All pieces are solid cubes; interior faces of the walls are visible. Floor
+    sits with its top at z=0; ceiling top at z=height+wall_thickness*2 (the
+    interior height equals `height`).
+
+    Args:
+        name_prefix (str): Used as a prefix for all 6 part names.
+        width (float): Interior X extent.
+        depth (float): Interior Y extent.
+        height (float): Interior Z extent.
+        wall_thickness (float): Thickness of every wall, floor, ceiling.
+        material (bpy.types.Material | None): Material applied to all parts.
+            Defaults to `procedural_stone('RoomStone')`.
+
+    Returns:
+        dict: {'floor', 'ceiling', 'wall_n', 'wall_s', 'wall_e', 'wall_w'} ->
+            bpy.types.Object.
+    """
+    if material is None:
+        material = procedural_stone('RoomStone')
+    half_w = width * 0.5
+    half_d = depth * 0.5
+    half_t = wall_thickness * 0.5
+
+    floor = add_cube(
+        name_prefix + '_Floor',
+        (0, 0, -half_t),
+        (half_w + wall_thickness, half_d + wall_thickness, half_t),
+        material=material,
+    )
+    ceiling = add_cube(
+        name_prefix + '_Ceiling',
+        (0, 0, height + half_t),
+        (half_w + wall_thickness, half_d + wall_thickness, half_t),
+        material=material,
+    )
+    wall_n = add_cube(
+        name_prefix + '_WallN',
+        (0, half_d + half_t, height * 0.5),
+        (half_w + wall_thickness, half_t, height * 0.5),
+        material=material,
+    )
+    wall_s = add_cube(
+        name_prefix + '_WallS',
+        (0, -half_d - half_t, height * 0.5),
+        (half_w + wall_thickness, half_t, height * 0.5),
+        material=material,
+    )
+    wall_e = add_cube(
+        name_prefix + '_WallE',
+        (half_w + half_t, 0, height * 0.5),
+        (half_t, half_d, height * 0.5),
+        material=material,
+    )
+    wall_w = add_cube(
+        name_prefix + '_WallW',
+        (-half_w - half_t, 0, height * 0.5),
+        (half_t, half_d, height * 0.5),
+        material=material,
+    )
+    return {
+        'floor': floor, 'ceiling': ceiling,
+        'wall_n': wall_n, 'wall_s': wall_s,
+        'wall_e': wall_e, 'wall_w': wall_w,
+    }
+
+
+def add_window_cutout(wall_obj, location, width=1.2, height=1.5):
+    """Cut a rectangular window through `wall_obj` at world `location`.
+
+    A cutter cube of (width, wall_thickness*3, height) is created at `location`
+    and used in `boolean_difference(wall_obj, cutter)` (cutter then deleted).
+    `wall_thickness` is inferred from the wall's bbox shortest axis.
+
+    Args:
+        wall_obj (bpy.types.Object): Wall to punch through.
+        location (tuple[float, float, float]): World-space window center.
+        width (float): Opening width.
+        height (float): Opening height.
+
+    Returns:
+        None.
+    """
+    # Infer wall thickness from bbox shortest axis (in world space).
+    bb = [wall_obj.matrix_world @ mathutils.Vector(c) for c in wall_obj.bound_box]
+    xs = [v.x for v in bb]; ys = [v.y for v in bb]; zs = [v.z for v in bb]
+    extents = [max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)]
+    wall_thickness = min(extents) if min(extents) > 0 else 0.2
+
+    cutter = add_cube(
+        wall_obj.name + '_WinCutter',
+        location,
+        (width * 0.5, wall_thickness * 1.5, height * 0.5),
+    )
+    boolean_difference(wall_obj, cutter, apply=True, delete_cutter=True)
+
+
+def add_door_frame(name, location, width=0.9, height=2.1, depth=0.25,
+                   material=None):
+    """Build a U-shaped door frame (left jamb + right jamb + lintel).
+
+    The frame is centered at `location` with the opening facing +Y. Pieces are
+    joined into a single object.
+
+    Args:
+        name (str): Object + data name of the joined frame.
+        location (tuple[float, float, float]): World position of the frame
+            center (X-center, Y-center of frame depth, Z-foot).
+        width (float): Opening width.
+        height (float): Opening height.
+        depth (float): Frame thickness (Y) and jamb width (X).
+        material (bpy.types.Material | None): Defaults to
+            `procedural_wood('DoorFrameWood')`.
+
+    Returns:
+        bpy.types.Object: The joined frame.
+    """
+    if material is None:
+        material = procedural_wood('DoorFrameWood')
+    cx, cy, cz = location
+    jamb_w = depth
+    jamb_h = height
+    half_w = width * 0.5
+    half_d = depth * 0.5
+    half_jw = jamb_w * 0.5
+    lintel_h = depth
+
+    left = add_cube(
+        name + '_JambL',
+        (cx - half_w - half_jw, cy, cz + jamb_h * 0.5),
+        (half_jw, half_d, jamb_h * 0.5),
+        material=material,
+    )
+    right = add_cube(
+        name + '_JambR',
+        (cx + half_w + half_jw, cy, cz + jamb_h * 0.5),
+        (half_jw, half_d, jamb_h * 0.5),
+        material=material,
+    )
+    lintel = add_cube(
+        name + '_Lintel',
+        (cx, cy, cz + jamb_h + lintel_h * 0.5),
+        (half_w + jamb_w, half_d, lintel_h * 0.5),
+        material=material,
+    )
+
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    left.select_set(True)
+    right.select_set(True)
+    lintel.select_set(True)
+    bpy.context.view_layer.objects.active = lintel
+    bpy.ops.object.join()
+    joined = bpy.context.view_layer.objects.active
+    joined.name = name
+    joined.data.name = name
+    return joined
+
+
+def place_on_floor(obj, floor_z=0.0):
+    """Translate `obj` so that the lowest world-space Z of its bbox sits on
+    `floor_z`.
+
+    Args:
+        obj (bpy.types.Object): Object to settle.
+        floor_z (float): Target Z for the object's lowest point.
+
+    Returns:
+        None.
+    """
+    bb = [obj.matrix_world @ mathutils.Vector(c) for c in obj.bound_box]
+    min_z = min(v.z for v in bb)
+    obj.location.z += (floor_z - min_z)
+
+
+# === Lighting presets expanded (v1.5.0) ===
+
+def hdri_world(hdri_path, strength=1.0, rotation_deg=0.0):
+    """Set up the world to use an HDRI as the environment.
+
+    Builds: TexCoord -> Mapping (rotate Z) -> Environment Texture (loaded image)
+    -> Background -> World Output.
+
+    Args:
+        hdri_path (str): Path to an .hdr/.exr file. Use a raw string on
+            Windows (Pitfall 33) — backslashes in non-raw Python strings are
+            error-prone (`r"C:\\hdr\\sky.hdr"` or forward slashes).
+        strength (float): Background strength.
+        rotation_deg (float): Rotation around Z in degrees.
+
+    Returns:
+        None.
+
+    Raises:
+        RuntimeError: If the image fails to load.
+    """
+    norm = hdri_path.replace('\\', '/')
+    try:
+        img = bpy.data.images.load(norm, check_existing=True)
+    except Exception as e:
+        raise RuntimeError("hdri_world: failed to load '{}': {}".format(norm, e))
+
+    world = bpy.context.scene.world
+    if world is None:
+        world = bpy.data.worlds.new('World')
+        bpy.context.scene.world = world
+    world.use_nodes = True
+    nt = world.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    n_coord = nt.nodes.new('ShaderNodeTexCoord')
+    n_coord.location = (-800, 0)
+    n_map = nt.nodes.new('ShaderNodeMapping')
+    n_map.location = (-600, 0)
+    n_map.inputs['Rotation'].default_value = (0.0, 0.0, math.radians(rotation_deg))
+    n_env = nt.nodes.new('ShaderNodeTexEnvironment')
+    n_env.location = (-300, 0)
+    n_env.image = img
+    n_bg = nt.nodes.new('ShaderNodeBackground')
+    n_bg.location = (0, 0)
+    n_bg.inputs['Strength'].default_value = strength
+    n_out = nt.nodes.new('ShaderNodeOutputWorld')
+    n_out.location = (300, 0)
+    nt.links.new(n_coord.outputs['Generated'], n_map.inputs['Vector'])
+    nt.links.new(n_map.outputs['Vector'], n_env.inputs['Vector'])
+    nt.links.new(n_env.outputs['Color'], n_bg.inputs['Color'])
+    nt.links.new(n_bg.outputs['Background'], n_out.inputs['Surface'])
+
+
+def add_area_light(name, location, rotation_euler, energy=100.0, size=1.0,
+                   color=(1, 1, 1)):
+    """Create an Area light and link it to the current scene.
+
+    Args:
+        name (str): Object + data name.
+        location (tuple[float, float, float]): World position.
+        rotation_euler (tuple[float, float, float]): Euler XYZ in radians.
+        energy (float): Light power (W).
+        size (float): Area light size.
+        color (tuple): RGB color.
+
+    Returns:
+        bpy.types.Object: The area-light object.
+    """
+    ldata = bpy.data.lights.new(name, type='AREA')
+    ldata.name = name
+    ldata.energy = energy
+    ldata.size = size
+    ldata.color = color
+    obj = bpy.data.objects.new(name, ldata)
+    obj.name = name
+    obj.location = location
+    obj.rotation_euler = rotation_euler
+    bpy.context.scene.collection.objects.link(obj)
+    return obj
+
+
+def add_emissive_plane(name, location, size=1.0, energy=5.0, color=(1, 1, 1)):
+    """Create a plane with a Principled-BSDF emission (acts as a soft light).
+
+    Args:
+        name (str): Object + data name + material name (`name+'_M'`).
+        location (tuple[float, float, float]): World placement.
+        size (float): Plane size (Blender's primitive_plane_add `size`).
+        energy (float): Emission strength.
+        color (tuple): Emission RGB.
+
+    Returns:
+        bpy.types.Object: The plane mesh.
+    """
+    bpy.ops.mesh.primitive_plane_add(size=size, location=location)
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = name
+    m = mat(name + '_M', (0.0, 0.0, 0.0), roughness=0.5,
+            emission=color, emission_strength=energy)
+    _assign_material(obj, m)
+    return obj
+
+
+def rim_light(target_obj, energy=3.0, color=(0.7, 0.85, 1.0)):
+    """Add a SUN rim light placed opposite the existing key light.
+
+    Looks up an existing key light by name `'SkillKey'` (else first SUN/AREA
+    light). Computes a direction from key->target and places `'SkillRim'` on
+    the OPPOSITE side of `target_obj`. If no key light is found, the rim is
+    placed at `(target - Y_offset, +Z_offset)`.
+
+    Args:
+        target_obj (bpy.types.Object): Subject the rim should hit.
+        energy (float): Sun light energy.
+        color (tuple): RGB color.
+
+    Returns:
+        bpy.types.Object: The rim-light object.
+    """
+    key = bpy.data.objects.get('SkillKey')
+    if key is None:
+        for o in bpy.data.objects:
+            if o.type == 'LIGHT' and o.data.type in ('SUN', 'AREA'):
+                key = o
+                break
+
+    target_loc = target_obj.matrix_world.translation
+    if key is not None:
+        key_to_tgt = (target_loc - key.matrix_world.translation)
+        if key_to_tgt.length == 0:
+            opposite_dir = mathutils.Vector((0, -1, 0.5))
+        else:
+            opposite_dir = key_to_tgt.normalized()
+        rim_loc = target_loc + opposite_dir * 8.0
+        rim_loc.z = max(rim_loc.z, target_loc.z + 2.0)
+    else:
+        rim_loc = target_loc + mathutils.Vector((0, -8.0, 4.0))
+
+    ldata = bpy.data.lights.new('SkillRim', type='SUN')
+    ldata.name = 'SkillRim'
+    ldata.energy = energy
+    ldata.color = color
+    obj = bpy.data.objects.new('SkillRim', ldata)
+    obj.name = 'SkillRim'
+    obj.location = rim_loc
+    # Aim at target via existing helper
+    bpy.context.scene.collection.objects.link(obj)
+    try:
+        _aim_at(obj, tuple(target_loc))
+    except Exception:
+        # fallback: leave default rotation
+        pass
+    return obj
+
+
+# === Turntable & product (v1.5.0) ===
+
+def setup_turntable(subject_obj, frame_start=1, frame_end=120, radius=None,
+                    height_offset=0.3, lens=85):
+    """Configure a 360-degree camera turntable around a subject.
+
+    Creates the scene camera if missing, drives it via `bezier_orbit_keyframes`
+    + `keyframe_camera_path`, and sets the scene frame range.
+
+    Args:
+        subject_obj (bpy.types.Object): Subject to orbit.
+        frame_start (int): First frame of the orbit.
+        frame_end (int): Last frame of the orbit.
+        radius (float | None): Orbit radius. Defaults to
+            max(subject_extent.length * 0.7, 3.0).
+        height_offset (float): Camera height above subject bbox center.
+        lens (float): Camera focal length (mm) used for every keyframe.
+
+    Returns:
+        bpy.types.Object: The camera object.
+
+    Note:
+        Non-idempotent — overwrites existing keyframes on the active camera.
+    """
+    bb = [subject_obj.matrix_world @ mathutils.Vector(c) for c in subject_obj.bound_box]
+    xs = [v.x for v in bb]; ys = [v.y for v in bb]; zs = [v.z for v in bb]
+    cx = (min(xs) + max(xs)) * 0.5
+    cy = (min(ys) + max(ys)) * 0.5
+    cz = (min(zs) + max(zs)) * 0.5
+    extent = mathutils.Vector((max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)))
+    if radius is None:
+        radius = max(extent.length * 0.7, 3.0)
+    cam_height = cz + height_offset
+
+    scene = bpy.context.scene
+    cam = scene.camera
+    if cam is None:
+        cam_data = bpy.data.cameras.new('TurntableCam')
+        cam_data.name = 'TurntableCam'
+        cam = bpy.data.objects.new('TurntableCam', cam_data)
+        cam.name = 'TurntableCam'
+        scene.collection.objects.link(cam)
+        scene.camera = cam
+
+    n_samples = 8
+    keyframes, look_at = bezier_orbit_keyframes(
+        center=(cx, cy, cz),
+        radius=radius,
+        height=cam_height,
+        n_samples=n_samples,
+        frame_start=frame_start,
+        frame_end=frame_end,
+    )
+    keyframe_camera_path(
+        camera=cam,
+        keyframes=keyframes,
+        look_at_per_key=look_at,
+        lens_per_key=[lens] * n_samples,
+    )
+    set_animation_range(start=frame_start, end=frame_end)
+    return cam
+
+
+def cyclorama_backdrop(name='Cyclorama', size=6.0, color=(0.05, 0.05, 0.05)):
+    """Build a product-photo cyclorama: floor + curved back wall, both
+    parented to a root Empty.
+
+    Children are built at LOCAL offsets from (0,0,0) and parented before any
+    translation — to avoid double-positioning if the user later moves the root.
+    The back wall uses a SIMPLE_DEFORM 'BEND' modifier.
+
+    Args:
+        name (str): Root Empty name; children are named `name+'_Floor'`/`_Back'`.
+        size (float): Side length of floor and back wall (square).
+        color (tuple): RGB diffuse color.
+
+    Returns:
+        bpy.types.Object: The root Empty parent.
+    """
+    m = mat(name + '_M', color, roughness=0.5)
+
+    # Build at local origin first
+    floor = add_cube(name + '_Floor', (0, 0, -0.025), (size * 0.5, size * 0.5, 0.025), material=m)
+    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, size * 0.5, size * 0.5))
+    back = bpy.context.object
+    back.name = name + '_Back'
+    back.data.name = name + '_Back'
+    back.rotation_euler = (math.radians(90), 0, 0)
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    # Subdivide to allow bending
+    for o in bpy.context.scene.objects:
+        o.select_set(False)
+    back.select_set(True)
+    bpy.context.view_layer.objects.active = back
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.subdivide(number_cuts=12)
+    bpy.ops.object.mode_set(mode='OBJECT')
+    mod = back.modifiers.new(name='Bend', type='SIMPLE_DEFORM')
+    mod.deform_method = 'BEND'
+    mod.deform_axis = 'X'
+    mod.angle = math.radians(90)
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    _assign_material(back, m)
+
+    # Root Empty at local origin
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
+    root = bpy.context.object
+    root.name = name
+    floor.parent = root
+    back.parent = root
+    return root
+
+
+# === Render output (v1.5.0) ===
+
+def set_render_resolution(width=1920, height=1080, percentage=100):
+    """Set scene render resolution and percentage.
+
+    Args:
+        width (int): Pixel width.
+        height (int): Pixel height.
+        percentage (int): Render-size percentage (1..100+).
+
+    Returns:
+        None.
+    """
+    scene = bpy.context.scene
+    scene.render.resolution_x = width
+    scene.render.resolution_y = height
+    scene.render.resolution_percentage = percentage
+
+
+def set_output_path(path, file_format='PNG'):
+    """Configure render output path and file format.
+
+    For 'OPEN_EXR' a 16-bit color depth is set; 'PNG' / 'JPEG' use 8-bit.
+
+    Args:
+        path (str): Output filepath (or directory + base name prefix).
+        file_format (str): One of 'PNG', 'JPEG', 'OPEN_EXR'.
+
+    Returns:
+        None.
+    """
+    scene = bpy.context.scene
+    scene.render.filepath = path
+    scene.render.image_settings.file_format = file_format
+    if file_format == 'OPEN_EXR':
+        try:
+            scene.render.image_settings.color_depth = '16'
+        except Exception:
+            pass
+    elif file_format in ('PNG', 'JPEG'):
+        try:
+            scene.render.image_settings.color_depth = '8'
+        except Exception:
+            pass
+
+
+def enable_denoising(engine='auto'):
+    """Enable denoising for the current render engine.
+
+    For EEVEE, no denoiser is forced; TAA reprojection is enabled when
+    available. For Cycles, denoising is enabled with OptiX when an NVIDIA GPU
+    is configured, else OpenImageDenoise.
+
+    Args:
+        engine (str): 'auto' (detect from `scene.render.engine`), 'EEVEE',
+            'CYCLES'.
+
+    Returns:
+        None.
+    """
+    scene = bpy.context.scene
+    if engine == 'auto':
+        eng = scene.render.engine
+        if 'CYCLES' in eng:
+            engine = 'CYCLES'
+        else:
+            engine = 'EEVEE'
+    if engine == 'CYCLES':
+        try:
+            scene.cycles.use_denoising = True
+            prefs = bpy.context.preferences
+            cprefs = prefs.addons.get('cycles')
+            use_optix = False
+            if cprefs is not None:
+                cp = cprefs.preferences
+                if getattr(cp, 'compute_device_type', '') == 'OPTIX':
+                    use_optix = True
+            scene.cycles.denoiser = 'OPTIX' if use_optix else 'OPENIMAGEDENOISE'
+        except Exception:
+            pass
+    else:
+        # EEVEE branch
+        try:
+            ee = getattr(scene, 'eevee', None)
+            if ee is not None and hasattr(ee, 'use_taa_reprojection'):
+                ee.use_taa_reprojection = True
+        except Exception:
+            pass
+
+
+def save_blend(filepath):
+    """Save the current scene as a .blend file.
+
+    Backslashes in `filepath` are normalized to forward slashes for safety on
+    Windows.
+
+    Args:
+        filepath (str): Absolute target path.
+
+    Returns:
+        None.
+    """
+    norm = filepath.replace('\\', '/')
+    bpy.ops.wm.save_as_mainfile(filepath=norm)

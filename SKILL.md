@@ -6,7 +6,7 @@ description: Use this skill whenever the user wants to model, light, shade, or r
   verbs like "смоделируй / отрендери / сделай сцену / материал / шейдер / model /
   render / scene". Also use for debugging bpy errors, adjusting render settings,
   or inspecting an existing .blend file.
-version: 1.4.0
+version: 1.5.0
 ---
 
 # Blender skill
@@ -21,6 +21,10 @@ Use this skill when:
 - The user asks for any 3D modelling, scene assembly, materials, lights, or rendering work in Blender.
 - The user opens a `.blend` and wants to inspect, modify, or render it.
 - A `bpy` error needs debugging.
+- The user wants to import an external 3D model (.obj, .fbx, .glb) and prep it.
+- The user wants a product/turntable render or a hero hard-surface presentation shot.
+- The user wants a furnished interior room or architectural interior.
+- The user wants a populated outdoor scene (vegetation: trees, grass, rocks).
 
 Do not use it for:
 - General 3D / rendering theory questions with no Blender code involved.
@@ -65,6 +69,30 @@ For every task, follow these steps in order. Do not collapse them.
    does the lighting read? are the materials correct? If no, fix and loop.
 7. **Iteration cap: 3.** If after three render+fix loops the image is still wrong,
    stop and ask the user instead of grinding.
+
+## Decision policy
+
+When facing a choice — use this.
+
+**Helper vs raw bpy.** Always prefer an existing helper. Only drop to raw `bpy.ops` if no helper covers the case AND `search_api_docs` confirms the call. Never guess API signatures.
+
+**Estimate complexity before you write the script.** Count expected objects:
+- ≤80 objects → single execute call is fine.
+- 80–200 → one call, but do not also add atmosphere/particles in the same chunk.
+- >200 → mandatory chunking. Build geometry → render preview → next chunk.
+
+**When the render looks wrong on the first attempt, check in this order:**
+1. Framing — is `auto_frame` called AFTER all geometry? Are composite roots at origin (children at local offsets)?
+2. Lighting — world strength bleaching everything? Volume fog density >0.005 with long camera?
+3. Materials — nodes found by `.type`? The procedural material applied to the right object?
+4. After 3 full fix cycles still wrong → stop, show the last render to the user, ask for direction.
+
+**Split into multiple turns vs do silently.**
+- Routine scene building: silent, show result at end.
+- Irreversible (overwriting .blend, deleting many objects): announce briefly first.
+- Ambiguous intent ("make it look better"): make ONE concrete choice, state it in one sentence, execute.
+
+**Engine.** Always `safe_engine()`. Never hardcode `BLENDER_EEVEE_NEXT` or `CYCLES`. For products / animations with reflections: prefer EEVEE + `enable_eevee_quality()`. For photorealism with no time pressure: Cycles is OK but mention render-time cost.
 
 ## Script contract
 
@@ -164,6 +192,25 @@ the parent transform — see [pitfalls.md](reference/pitfalls.md).
   to fit a list of objects to the render aspect — use this last, after geometry.
 - Math: `bbox_of(objects)`.
 
+### v1.5.0 additions
+
+- **Asset import:** `import_obj(filepath)`, `import_fbx(filepath)`, `import_glb(filepath)`,
+  `normalize_imported(obj, target_size)` (centers + rescales to unit-ish size),
+  `cleanup_materials(obj)` (purges duplicate slots, fixes broken texture paths).
+- **Geometry nodes (data API):** `gn_scatter_on_surface(target, instance, count, seed)`,
+  `gn_array_along_curve(curve, instance, count)`, `gn_random_transform(obj, scale_jitter, rot_jitter)`.
+- **Vegetation:** `add_tree_cluster(center, radius, count, seed)`, `scatter_grass_tufts(area_bounds, count≤300, seed)`,
+  `scatter_rocks(area_bounds, count, size_range, seed)`.
+- **Cloth / soft-surface (sim-free):** `add_curtain(location, w, h, folds)` (shape-key sine wave, no bake),
+  `add_draped_cloth(target_obj)` (static drape via shrinkwrap+smooth).
+- **Interior / room:** `build_room_box(w, d, h, wall_color)`, `add_window_cutout(wall, x, z, w, h)`,
+  `add_door_frame(wall, x, w, h)`, `add_emissive_plane(location, size, color, strength)`.
+- **Lighting presets (extended):** `add_area_light(location, size, energy, color)`,
+  `hdri_world(filepath, strength)` (validates `image.has_data`, normalises Windows paths).
+- **Turntable / product:** `cyclorama_backdrop(color, size)`, `setup_turntable(subject, frames=120, turns=1)`.
+- **Render output:** `decimate_mesh(obj, ratio≥0.1)`, `auto_bevel(obj, width, segments)`,
+  `place_on_floor(obj)` (uses evaluated bbox).
+
 ## Lighting recipes
 
 Defaults that read well without fiddling. Pass `color` to a freshly created light's
@@ -180,6 +227,21 @@ Defaults that read well without fiddling. Pass `color` to a freshly created ligh
 For metals/jewellery prefer the studio-dark mood — specular highlight reads cleanly
 against the dark backdrop.
 
+## Task recipes
+
+Pick the matching recipe as your starting plan.
+
+| Task | Recipe steps |
+|---|---|
+| Product turntable | `reset_scene()` → `cyclorama_backdrop()` → import / create subject → `setup_turntable()` → `enable_eevee_quality()` → preview frame 1 → `render_animation_frames()` |
+| Interior room | `reset_scene()` → `build_room_box()` → `add_window_cutout()` / `add_door_frame()` → furnish → `add_area_light()` + `add_emissive_plane()` → `auto_frame()` → render |
+| Exterior building + environment | `reset_scene()` → arch_building template → `scatter_rocks()` → `add_tree_cluster()` → `scatter_grass_tufts()` → `set_hosek_sky()` → `add_volumetric_fog(density≤0.003)` → `auto_frame()` → render |
+| Hero prop / hard-surface | `reset_scene()` → `import_obj()` or `import_fbx()` → `normalize_imported()` → `cleanup_materials()` → `auto_bevel()` → `three_point_light()` → `studio_dark_world()` → `add_camera_dof()` → render |
+| Cinematic flythrough | `reset_scene()` → build scene in chunks (exterior → preview → interior → preview) → `bird_flight_keyframes()` (≥12 waypoints) → `render_animation_frames()` in 16-frame chunks → assemble with ffmpeg |
+| Vegetation landscape | `reset_scene()` → ground plane with `procedural_grass`/`procedural_dirt_path` → `scatter_rocks()` → `add_tree_cluster()` → `scatter_grass_tufts()` → `set_hosek_sky()` → `add_volumetric_fog(density≤0.003)` → render |
+
+**Always render a preview after the first structural chunk.** Do not build the entire scene then discover framing is wrong.
+
 ## Templates
 
 When you need a starting scene, load a template instead of building from scratch:
@@ -189,6 +251,9 @@ When you need a starting scene, load a template instead of building from scratch
 | [templates/basic_scene.py](templates/basic_scene.py) | Empty staging — floor, sky, three-point light. Add subjects, then `auto_frame`. | floor size in `add_plane`, sky color in `set_world_sky`. |
 | [templates/product_shot.py](templates/product_shot.py) | Single subject on a black studio cyclorama. | `SUBJECT_LOCATION`; replace the gold cube with your own subject; `key_energy`. |
 | [templates/arch_building.py](templates/arch_building.py) | Parametric small building (nave + tower + spire + apse). | Constants at the top: `NAVE_W/L/H`, `ROOF_H`, `TOWER_S/H`, `SPIRE_H`. Pass only the building parts to `auto_frame`, not the ground. |
+| [templates/interior_room.py](templates/interior_room.py) | Furnished interior with window, door, table, 2 chairs, rug, area light. | `ROOM_W/D/H`, `WALL_COLOR`. |
+| [templates/turntable.py](templates/turntable.py) | Studio cyclorama + placeholder hero subject + 360° camera over 120 frames. | `SUBJECT_LOCATION`, `TURNS`, `FRAME_END`; replace placeholder with your model. |
+| [templates/landscape.py](templates/landscape.py) | Outdoor landscape: grass terrain, dirt path, tree clusters, scattered rocks, grass tufts, golden-hour Hosek sky. | `TERRAIN_SIZE`, `TREE_CLUSTERS`, `ROCK_COUNT`, `GRASS_TUFTS` (≤300/call). |
 
 Each template imports helpers via the same `importlib` prelude — copy the file
 contents into `execute_blender_code` as-is, then extend.
@@ -201,6 +266,21 @@ contents into `execute_blender_code` as-is, then extend.
 3. If the symptom is not there, call `search_api_docs` for the API you used.
 4. Fix the root cause and re-run. If you find a new failure mode, append it to
    `pitfalls.md` so the next session benefits.
+
+### Quick symptom → fix
+
+| Symptom | First check | Fix |
+|---|---|---|
+| `KeyError: 'Camera'` or `KeyError: 'Куб'` | Locale translation | Use `bpy.context.scene.camera`; rename every primitive after creation. |
+| Black render | World + fog | `add_volumetric_fog` density >0.005 with long camera → reduce density. World strength = 0? |
+| Objects at wrong position | Parent doubling | Composite root Empty at origin, children at LOCAL offsets only. |
+| `auto_frame` clips | Stale `SkillCamera.001` frusta | Already fixed in helper; if scene is dirty call `reset_scene()` first. |
+| MCP timeout mid-script | >200 objects or `animation=True` | Chunk; use `render_animation_frames()` in 16-frame batches. |
+| `AttributeError: 'NoneType'` on light/camera | Object not active/selected | `bpy.context.view_layer.objects.active = obj; obj.select_set(True)`. |
+| Bezier camera orbit overshoots | Keyframes >60° apart | Add intermediate waypoints; `bird_flight_keyframes` with ≥12 pts. |
+| `ShaderNodeTexSky` Nishita error in 5.1 | NISHITA missing | `set_hosek_sky()` (uses HOSEK_WILKIE). |
+| `'Action' object has no attribute 'fcurves'` | Blender 5.x slotted actions | Use `keyframe_camera_path()` — handles both legacy + slotted. |
+| HDRI silently black on Windows | Backslash path | Use raw-string or forward slashes. `hdri_world()` validates `image.has_data`. |
 
 ## Anti-patterns
 
@@ -216,6 +296,14 @@ contents into `execute_blender_code` as-is, then extend.
 
 ## Changelog
 
+- 1.5.0 — General-purpose expansion. Added 22 helpers across 8 new categories
+  (asset import, geometry nodes, vegetation scattering, cloth/soft-surface,
+  interior/room, extended lighting, turntable/product, render output). Added
+  three templates (`interior_room`, `turntable`, `landscape`). Added
+  "Decision policy" and "Task recipes" sections. Added quick symptom→fix
+  table to "When something breaks". Added 6 pitfalls (GN via data API,
+  obj importer rename in 3.3+, cloth/scatter timeouts, decimate <0.1 manifold,
+  HDRI Windows path, stale bbox after ops).
 - 1.4.0 — Cinematic castle flythrough eval (8s mp4, 192 frames, animated gate).
   Added 4 helpers: `set_hosek_sky`, `add_cloud_drifts`, `set_object_origin`,
   `swing_door`, `bird_flight_keyframes`. 5 new pitfalls: (1) ShaderNodeTexSky

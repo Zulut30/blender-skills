@@ -193,3 +193,46 @@ sun.rotation_euler = direction.to_track_quat('-Z','Y').to_euler()
 - Добавляй небольшой Z-banking (1-12°) на orbit-сегментах через `Quaternion(direction, math.radians(roll)) @ track_quat`.
 - Сегменты: descent → orbit (4-6 точек по углу ≤45°) → straighten → approach → entry → reveal.
 - Финальный кадр должен пулнуть назад от ближайшего обьекта на 2-3м, иначе клиппинг.
+
+## Pitfall 29: Geometry Nodes на 5.x — node_group через bpy.data, не через operator
+**Симптом:** `RuntimeError: poll() failed` или `context is incorrect` при попытке добавить GN модификатор через `bpy.ops.node.new_geometry_nodes_modifier()` или похожие операторы.
+**Причина:** Operator-based создание GN-tree требует UI-context (открытый Geometry Nodes editor), которого через MCP `execute_blender_code` нет.
+**Фикс:** Создавай node group чисто через data API:
+```python
+ng = bpy.data.node_groups.new('MyGN', 'GeometryNodeTree')
+# add nodes via ng.nodes.new('GeometryNodeXxx'), wire with ng.links.new(...)
+mod = obj.modifiers.new('Nodes', 'NODES')
+mod.node_group = ng
+```
+Хелперы `gn_scatter_on_surface`, `gn_array_along_curve`, `gn_random_transform` уже это делают.
+
+## Pitfall 30: bpy.ops.import_scene.obj устарел в Blender 3.3+
+**Симптом:** `RuntimeError: Operator bpy.ops.import_scene.obj poll failed` или `AttributeError: Calling operator "bpy.ops.import_scene.obj" error, could not be found`.
+**Причина:** Старый OBJ импортёр заменён на новый в 3.3+. Нужен `bpy.ops.wm.obj_import(filepath=...)`.
+**Фикс:** Используй helper `import_obj()` или напрямую `bpy.ops.wm.obj_import(filepath=path)`. Для FBX оператор остался: `bpy.ops.import_scene.fbx`.
+
+## Pitfall 31: Cloth simulation в MCP даёт rest pose / scatter_grass_tufts с count > 500 таймаутит
+**Симптом:** (a) `bpy.ops.ptcache.bake_all()` или `bpy.ops.cloth.bake()` зависает MCP (требует UI). (b) `scatter_grass_tufts(count=600)` таймаутит на raycast loop.
+**Причина:** (a) Cloth bake — UI-операция, blocks the MCP socket. (b) Per-vertex raycasting в питоновском цикле — O(N) проход, при N=600 идёт >MCP timeout.
+**Фикс:** (a) Используй ShapeKey-based static deformation (как в `add_curtain` — синусоидальная волна по вершинам, без симуляции). (b) Cap count ≤300 на один вызов `scatter_grass_tufts`. Для 600 — два вызова с разными seed.
+
+## Pitfall 32: Decimate с ratio<0.1 ломает manifold
+**Симптом:** После `decimate_mesh(obj, ratio=0.05)` последующие boolean операции выдают `Solver could not find a solution` или дают inverted normals.
+**Причина:** Decimate COLLAPSE удаляет рёбра агрессивно — при ratio<0.1 мелкие фичи коллапсируют в self-intersecting/non-manifold геометрию.
+**Фикс:**
+- Перед apply: `assert len(obj.data.polygons) > 4`.
+- После apply: `bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.remove_doubles(threshold=1e-4); bpy.ops.mesh.normals_make_consistent(inside=False); bpy.ops.object.mode_set(mode='OBJECT')`.
+- Для бульев лучше ratio>=0.2.
+
+## Pitfall 33: hdri_world с Windows-путями молчаливый black world
+**Симптом:** `hdri_world(r'C:\hdris\sunset.hdr')` отрабатывает без exception, но мир чёрный на рендере.
+**Причина:** `bpy.data.images.load()` иногда не парсит обратные слэши в путях на Windows и возвращает «загруженный» image объект без пиксельных данных. Проверки нет.
+**Фикс:**
+- Передавай только raw-string или forward-slashes: `r"C:\path\to.hdr"` или `"C:/path/to.hdr"`.
+- Helper `hdri_world` нормализует путь через `path.replace('\\\\', '/')` и проверяет `image.has_data`. Если `has_data=False` — поднимает понятный exception.
+- Тест: после загрузки — `print(image.size)`. Размер (0, 0) → файл не считан.
+
+## Pitfall 34: Зачитывание `obj.bound_box` сразу после операторов даёт устаревшие координаты
+**Симптом:** `auto_frame([obj])` после `boolean_difference` или `transform_apply` фреймит на старый bbox; place_on_floor роняет объект под землю.
+**Причина:** `obj.bound_box` lazily пересчитывается при следующем view_layer evaluate. Сразу после оператора — кешированные данные.
+**Фикс:** Перед чтением `bound_box` явно вызови `bpy.context.view_layer.update()` или (надёжнее) `obj.evaluated_get(bpy.context.evaluated_depsgraph_get())`. Хелпер `bbox_of` делает это.

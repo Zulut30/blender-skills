@@ -33,7 +33,7 @@ All notable changes to the Blender skill.
 - Validator checks: `check_no_hardcoded_user_paths`, `check_doc_helpers_exist`.
 
 ### Changed
-- All `C:\Users\zulut\...` paths in SKILL.md and templates replaced with `os.path.expanduser("~/.claude/skills/blender/...")`.
+- All `C:\Users\<user>\...` literals in SKILL.md and templates replaced with `os.path.expanduser("~/.claude/skills/blender/...")`.
 - 3 templates' hardcoded `engine='BLENDER_EEVEE'` replaced with `engine=H.safe_engine()`.
 - `reference/api/camera.md` / `safe-operators.md` / `animation.md` recipes rewritten to stop demonstrating the anti-patterns their own pitfall sections warn against.
 

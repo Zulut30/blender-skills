@@ -10,10 +10,10 @@ REPLACE / TWEAK:
 - Light energies: CeilingLight (practical) and SkyFill (window bounce) are the two
   primary keys. Drop CeilingLight to ~30 for a moodier evening look.
 """
-import importlib.util, bpy, math
+import importlib.util, bpy, os, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 # PARAMETERS

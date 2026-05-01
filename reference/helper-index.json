@@ -711,6 +711,15 @@
     "notes": "uses bpy.ops.import_scene.fbx"
   },
   {
+    "name": "import_glb",
+    "signature": "import_glb(filepath, name=None)",
+    "category": "import_export",
+    "return": "value (e.g. `roots`)",
+    "side_effects": "imports external file and adds objects to the scene",
+    "idempotency": "no",
+    "notes": ""
+  },
+  {
     "name": "import_obj",
     "signature": "import_obj(filepath, name=None)",
     "category": "import_export",

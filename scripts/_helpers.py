@@ -333,6 +333,8 @@ def frame_camera(target=(0, 0, 0), distance=18, elevation_deg=35, azimuth_deg=45
 def bbox_of(objects):
     # Cameras/lights also expose bound_box but their frusta blow up the result —
     # restrict to MESH/CURVE/SURFACE/META.
+    bpy.context.view_layer.update()
+    deps = bpy.context.evaluated_depsgraph_get()
     mins = [float('inf')] * 3
     maxs = [float('-inf')] * 3
     any_pt = False
@@ -341,8 +343,9 @@ def bbox_of(objects):
             continue
         if obj.type not in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}:
             continue
-        mw = obj.matrix_world
-        for corner in obj.bound_box:
+        eval_obj = obj.evaluated_get(deps) if deps is not None else obj
+        mw = eval_obj.matrix_world
+        for corner in eval_obj.bound_box:
             world = mw @ mathutils.Vector(corner)
             for i in range(3):
                 if world[i] < mins[i]:
@@ -499,7 +502,15 @@ def set_sunset_world(top=(0.95, 0.65, 0.40), bottom=(0.20, 0.18, 0.30), strength
     if sky is not None:
         try:
             if hasattr(sky, "sky_type"):
-                sky.sky_type = "NISHITA"
+                try:
+                    available = {it.identifier for it in
+                                 sky.bl_rna.properties['sky_type'].enum_items}
+                except Exception:
+                    available = set()
+                for cand in ('HOSEK_WILKIE', 'NISHITA', 'PREETHAM', 'MULTIPLE_SCATTERING', 'SINGLE_SCATTERING'):
+                    if cand in available:
+                        sky.sky_type = cand
+                        break
             if hasattr(sky, "sun_elevation"):
                 sky.sun_elevation = math.radians(5.0)
             if hasattr(sky, "sun_rotation"):
@@ -1571,31 +1582,36 @@ def paving_stones(name_prefix, area_min, area_max, tile_size=0.5,
             base_rgba = None
 
     _ci_random.seed(0)
+    # Build a palette of jittered material clones once, then index per tile.
+    palette_size = 8
+    palette = []
+    if material is not None and base_rgba is not None and color_jitter > 0.0:
+        for k in range(palette_size):
+            dr = _ci_random.uniform(-color_jitter, color_jitter)
+            dg = _ci_random.uniform(-color_jitter, color_jitter)
+            db = _ci_random.uniform(-color_jitter, color_jitter)
+            clone_name = '%s_TileMat_v%d' % (name_prefix, k)
+            m = bpy.data.materials.get(clone_name)
+            if m is None:
+                m = material.copy()
+                m.name = clone_name
+            try:
+                for n in m.node_tree.nodes:
+                    if n.type == 'BSDF_PRINCIPLED' and 'Base Color' in n.inputs:
+                        n.inputs['Base Color'].default_value = (
+                            max(0.0, min(1.0, base_rgba[0] + dr)),
+                            max(0.0, min(1.0, base_rgba[1] + dg)),
+                            max(0.0, min(1.0, base_rgba[2] + db)),
+                            base_rgba[3])
+                        break
+            except Exception:
+                pass
+            palette.append(m)
     for ix in range(nx):
         for iy in range(ny):
             cx = xmin + margin_x + (ix + 0.5) * tile_size + _ci_random.uniform(-jitter, jitter)
             cy = ymin + margin_y + (iy + 0.5) * tile_size + _ci_random.uniform(-jitter, jitter)
-            tile_mat = material
-            if base_rgba is not None and color_jitter > 0.0:
-                dr = _ci_random.uniform(-color_jitter, color_jitter)
-                dg = _ci_random.uniform(-color_jitter, color_jitter)
-                db = _ci_random.uniform(-color_jitter, color_jitter)
-                clone_name = '%s_TileMat_%02d_%02d' % (name_prefix, ix, iy)
-                tile_mat = bpy.data.materials.get(clone_name)
-                if tile_mat is None:
-                    tile_mat = material.copy()
-                    tile_mat.name = clone_name
-                try:
-                    for n in tile_mat.node_tree.nodes:
-                        if n.type == 'BSDF_PRINCIPLED' and 'Base Color' in n.inputs:
-                            n.inputs['Base Color'].default_value = (
-                                max(0.0, min(1.0, base_rgba[0] + dr)),
-                                max(0.0, min(1.0, base_rgba[1] + dg)),
-                                max(0.0, min(1.0, base_rgba[2] + db)),
-                                base_rgba[3])
-                            break
-                except Exception:
-                    pass
+            tile_mat = palette[(ix * ny + iy) % palette_size] if palette else material
             tile_name = '%s_T_%02d_%02d' % (name_prefix, ix, iy)
             tile = add_cube(tile_name,
                             location=(cx, cy, z_center),
@@ -2249,6 +2265,40 @@ def import_fbx(filepath, name=None):
             except Exception:
                 pass
     return tops
+
+
+def import_glb(filepath, name=None):
+    """Import a .glb / .gltf file and optionally rename + select-prep the root.
+
+    Args:
+        filepath (str): path to the .glb or .gltf. Use a raw string or
+            forward slashes on Windows.
+        name (str, optional): rename the first imported root object to this.
+
+    Returns:
+        list: top-level imported objects (those whose parent is None among
+        the freshly-imported set), in import order.
+
+    Side effects: creates new mesh objects + materials + (often) images in
+    the current Blender data. Caller may want to follow up with
+    `normalize_imported(obj)` to bake transforms.
+    """
+    import os
+    fp = os.path.expanduser(filepath).replace('\\', '/')
+    if not os.path.exists(fp):
+        raise FileNotFoundError("import_glb: file not found: {}".format(fp))
+    before = set(bpy.data.objects)
+    try:
+        bpy.ops.import_scene.gltf(filepath=fp)
+    except Exception as e:
+        raise RuntimeError("import_glb: gltf import failed for '{}': {}".format(fp, e))
+    new_objs = [o for o in bpy.data.objects if o not in before]
+    roots = [o for o in new_objs if o.parent is None or o.parent not in new_objs]
+    if name and roots:
+        roots[0].name = name
+        if roots[0].data is not None and hasattr(roots[0].data, 'name'):
+            roots[0].data.name = name
+    return roots
 
 
 def normalize_imported(obj):
@@ -3085,6 +3135,11 @@ def hdri_world(hdri_path, strength=1.0, rotation_deg=0.0):
         img = bpy.data.images.load(norm, check_existing=True)
     except Exception as e:
         raise RuntimeError("hdri_world: failed to load '{}': {}".format(norm, e))
+    if not img.has_data:
+        raise RuntimeError(
+            "hdri_world: '{}' loaded but has no pixel data — bad path, "
+            "unreadable file, or unsupported format".format(norm)
+        )
 
     world = bpy.context.scene.world
     if world is None:

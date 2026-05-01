@@ -1,7 +1,7 @@
 ---
 name: blender
 description: Use this skill for Blender, .blend, bpy, bmesh, geometry nodes, materials, lighting, cameras, animation, rendering, imports/exports, and Blender MCP scene automation/debugging.
-version: 1.5.1
+version: 1.6.0
 ---
 
 # Blender skill
@@ -37,6 +37,43 @@ Do not use it for:
 | `search_manual_docs` | For workflow / operator usage explanations. |
 | `get_screenshot_of_window_as_image` | When the user asks "what does it look like in the editor" rather than render output. |
 | `jump_to_*` | When the user wants to be brought to a specific tab/object in the UI. |
+
+## Required reading on activation
+
+Before the **first** `execute_blender_code` call in a fresh session, read these
+files into context. They contain the failure modes you do not want to
+re-discover the hard way:
+
+1. [`reference/pitfalls.md`](reference/pitfalls.md) — full failure log (locale,
+   slotted-actions API, EEVEE volume blackouts, MCP timeouts, parent-doubling).
+   Index every entry; you will need them when traceback comes back.
+2. [`reference/helper-index.md`](reference/helper-index.md) — current public
+   helper catalogue with signatures, side effects, idempotency.
+3. [`reference/api-cheatsheet.md`](reference/api-cheatsheet.md) — index page
+   that links to per-topic recipes under [`reference/api/`](reference/api/).
+
+For specific tasks, also read:
+
+| Task | Required reading |
+|---|---|
+| Modelling / mesh edits | [`reference/api/mesh-bmesh.md`](reference/api/mesh-bmesh.md), [`reference/api/modifiers.md`](reference/api/modifiers.md) |
+| Materials / shaders | [`reference/api/materials.md`](reference/api/materials.md) |
+| Lighting / world / sky | [`reference/api/lighting-world.md`](reference/api/lighting-world.md) |
+| Camera placement / framing | [`reference/api/camera.md`](reference/api/camera.md) |
+| Rendering | [`reference/api/render.md`](reference/api/render.md) |
+| Animation / cinematics | [`reference/api/animation.md`](reference/api/animation.md) |
+| Inspecting an unfamiliar `.blend` | [`reference/api/inspection.md`](reference/api/inspection.md) |
+| Geometry Nodes | [`reference/api/geometry-nodes.md`](reference/api/geometry-nodes.md) |
+| Operator-context errors | [`reference/api/safe-operators.md`](reference/api/safe-operators.md) |
+
+For agent safety questions read [`docs/security.md`](docs/security.md).
+For setup / install / sanity-check on a fresh machine, read
+[`docs/setup-blender-mcp.md`](docs/setup-blender-mcp.md).
+For symptom → fix routing read [`docs/troubleshooting.md`](docs/troubleshooting.md).
+
+If you cannot read these files (sandboxed, no FS) you may proceed using only
+this `SKILL.md` and the workflow below — but expect to hit pitfalls already
+documented in `pitfalls.md`.
 
 ## Mandatory workflow
 
@@ -97,7 +134,7 @@ Every `execute_blender_code` payload follows this shape:
 import importlib.util, bpy, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 # ... your scene code, using H.add_cube / H.mat / H.auto_frame / etc.
@@ -197,7 +234,7 @@ the parent transform — see [pitfalls.md](reference/pitfalls.md).
 - **Vegetation:** `add_tree_cluster(center, radius, count, seed)`, `scatter_grass_tufts(area_bounds, count≤300, seed)`,
   `scatter_rocks(area_bounds, count, size_range, seed)`.
 - **Cloth / soft-surface (sim-free):** `add_curtain(location, w, h, folds)` (shape-key sine wave, no bake),
-  `add_draped_cloth(target_obj)` (static drape via shrinkwrap+smooth).
+  `add_rug(location, size_x, size_y, color)` (subdivided plane with vertex jitter for fabric feel).
 - **Interior / room:** `build_room_box(w, d, h, wall_color)`, `add_window_cutout(wall, x, z, w, h)`,
   `add_door_frame(wall, x, w, h)`, `add_emissive_plane(location, size, color, strength)`.
 - **Lighting presets (extended):** `add_area_light(location, size, energy, color)`,

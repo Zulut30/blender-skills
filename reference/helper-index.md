@@ -1,6 +1,6 @@
 # Helper index
 
-Total: 83 helpers across 9 categories
+Total: 84 helpers across 9 categories
 
 Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` after editing helpers.
 
@@ -122,6 +122,7 @@ Auto-derived from `scripts/_helpers.py`. Run `python tools/validate_skill.py` af
 | Function | Returns | Side effects | Idempotent | Notes |
 |---|---|---|---|---|
 | `import_fbx(filepath, name=None)` | value (e.g. `tops`) | imports external file and adds objects to the scene | no | uses bpy.ops.import_scene.fbx |
+| `import_glb(filepath, name=None)` | value (e.g. `roots`) | imports external file and adds objects to the scene | no |  |
 | `import_obj(filepath, name=None)` | value (e.g. `joined`) | imports external file and adds objects to the scene | no | uses bpy.ops.wm.obj_import (Blender 4.x) |
 
 ## geometry_nodes

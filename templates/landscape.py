@@ -10,10 +10,10 @@ REPLACE / TWEAK:
 - Fog density controls atmospheric depth — raise for misty, lower for crisp.
 - Camera height: pulled to z=8 manually after auto_frame for a wide vista.
 """
-import importlib.util, bpy, math
+import importlib.util, bpy, os, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 # PARAMETERS

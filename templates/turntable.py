@@ -10,10 +10,10 @@ REPLACE / TWEAK:
 - Studio darkness: H.studio_dark_world strength controls ambient fill.
 - Key/rim energy: tune via three_point_light(key_energy=...) and rim_light(energy=...).
 """
-import importlib.util, bpy, math
+import importlib.util, bpy, os, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 # PARAMETERS

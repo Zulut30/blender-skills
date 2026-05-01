@@ -6,15 +6,18 @@ Back to [API cheatsheet](../api-cheatsheet.md).
 
 ### DOF with focus_object and fstop
 ```python
-cam = bpy.data.objects['Camera'].data
+import bpy
+cam = bpy.context.scene.camera.data
+target = next(o for o in bpy.data.objects if o.type == 'MESH')
 cam.dof.use_dof = True
-cam.dof.focus_object = bpy.data.objects['Cube']
+cam.dof.focus_object = target
 cam.dof.aperture_fstop = 2.8
 ```
 
 ### orthographic camera
 ```python
-cam = bpy.data.objects['Camera'].data
+import bpy
+cam = bpy.context.scene.camera.data
 cam.type = 'ORTHO'
 cam.ortho_scale = 6.0
 ```
@@ -22,8 +25,8 @@ cam.ortho_scale = 6.0
 ### track-to constraint on target
 ```python
 import bpy
-cam_obj = bpy.data.objects['Camera']
-target  = bpy.data.objects['Cube']
+cam_obj = bpy.context.scene.camera
+target  = next(o for o in bpy.data.objects if o.type == 'MESH')
 c = cam_obj.constraints.new(type='TRACK_TO')
 c.target = target
 c.track_axis = 'TRACK_NEGATIVE_Z'

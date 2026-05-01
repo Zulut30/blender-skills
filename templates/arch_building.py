@@ -1,8 +1,8 @@
 """Parametric building: nave, gable roof, tower with belvedere and spire, cross, apse, windows."""
-import importlib.util, bpy, math
+import importlib.util, bpy, os, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 NAVE_W, NAVE_L, NAVE_H = 5, 9, 4
@@ -79,7 +79,7 @@ apse_roof = H.add_cone('ApseRoof',
 
 H.set_world_sky(top=(0.55, 0.75, 0.95), strength=1.2)
 key, fill, back = H.three_point_light(target=(0, 0, NAVE_H / 2.0), key_energy=4.0)
-H.set_render(engine='BLENDER_EEVEE', resolution=(1280, 800), samples=64)
+H.set_render(engine=H.safe_engine(), resolution=(1280, 800), samples=64)
 
 scene_objects = [ground, building, building_roof, tower, belvedere, spire,
                  cross_v, cross_h, door, rose, apse, apse_roof] + windows + steps

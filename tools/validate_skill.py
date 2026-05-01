@@ -344,6 +344,120 @@ def check_index_consistency(results, tree, index):
         )
 
 
+HARDCODED_PATH_PATTERNS = [
+    re.compile(r"[Cc]:\\Users\\[A-Za-z0-9_.-]+\\"),
+    re.compile(r"[Cc]:/Users/[A-Za-z0-9_.-]+/"),
+    re.compile(r"/Users/[A-Za-z0-9_.-]+/(?!Shared)"),
+    re.compile(r"/home/[A-Za-z0-9_.-]+/"),
+]
+
+
+def _collect_hardcoded_path_files():
+    files = []
+    for top in ("SKILL.md", "README.md", "CHANGELOG.md"):
+        p = REPO_ROOT / top
+        if p.exists():
+            files.append(p)
+    for sub in ("reference", "docs"):
+        d = REPO_ROOT / sub
+        if d.is_dir():
+            for p in d.rglob("*.md"):
+                files.append(p)
+    tdir = REPO_ROOT / "templates"
+    if tdir.is_dir():
+        for p in tdir.rglob("*.py"):
+            files.append(p)
+    return files
+
+
+def check_no_hardcoded_user_paths(results):
+    files = _collect_hardcoded_path_files()
+    hits = 0
+    for f in files:
+        try:
+            text = f.read_text(encoding="utf-8")
+        except Exception as e:
+            results.append(Result(False, "cannot read %s: %s" % (f, e)))
+            continue
+        in_skip_block = False
+        rel = f.relative_to(REPO_ROOT).as_posix()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("```"):
+                tag = stripped[3:].strip().lower()
+                if not in_skip_block and tag == "text-example":
+                    in_skip_block = True
+                elif in_skip_block and stripped == "```":
+                    in_skip_block = False
+                continue
+            if in_skip_block:
+                continue
+            for pat in HARDCODED_PATH_PATTERNS:
+                if pat.search(line):
+                    snippet = line.strip()
+                    if len(snippet) > 80:
+                        snippet = snippet[:80]
+                    results.append(
+                        Result(
+                            False,
+                            "hardcoded user path: %s:%d: %s"
+                            % (rel, lineno, snippet),
+                        )
+                    )
+                    hits += 1
+                    break
+    if hits == 0:
+        results.append(Result(True, "no hardcoded user paths in skill files"))
+
+
+DOC_HELPER_ALLOWLIST = {
+    'bpy', 'print', 'isinstance', 'hasattr', 'getattr', 'len', 'range',
+    'list', 'set', 'dict', 'tuple', 'open', 'abs', 'min', 'max', 'sum',
+    'sorted', 'enumerate', 'zip', 'next', 'iter', 'os', 'json', 'ast',
+    'pathlib',
+}
+
+DOC_HELPER_REF_RE = re.compile(r"`([a-z_][a-z_0-9]*)\(")
+
+
+def check_doc_helpers_exist(results, tree):
+    if tree is None:
+        results.append(
+            Result(False, "skipping doc helper references (helpers parse failed)")
+        )
+        return
+    public = set(public_top_level_funcs(tree))
+    misses = 0
+    for top in ("SKILL.md", "README.md"):
+        p = REPO_ROOT / top
+        if not p.exists():
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except Exception as e:
+            results.append(Result(False, "cannot read %s: %s" % (p, e)))
+            continue
+        for m in DOC_HELPER_REF_RE.finditer(text):
+            name = m.group(1)
+            if name in public or name in DOC_HELPER_ALLOWLIST:
+                continue
+            results.append(
+                Result(
+                    False,
+                    "doc references missing helper: %s mentions `%s()` but not defined"
+                    % (top, name),
+                )
+            )
+            misses += 1
+    if misses == 0:
+        results.append(
+            Result(
+                True,
+                "all backticked helper references in SKILL.md/README.md exist",
+            )
+        )
+
+
 def main():
     results = []
     print("Validating skill at %s" % REPO_ROOT)
@@ -354,6 +468,8 @@ def main():
     tree = check_helpers_parse(results)
     index = check_helper_index_json(results)
     check_index_consistency(results, tree, index)
+    check_no_hardcoded_user_paths(results)
+    check_doc_helpers_exist(results, tree)
     check_all_json_files(results)
 
     for r in results:

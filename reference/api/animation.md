@@ -18,15 +18,18 @@ obj.keyframe_insert('location'); obj.keyframe_insert('rotation_euler')
 ```
 
 ### set frame range and render animation
+Render per-frame inside the MCP — `animation=True` blocks the MCP socket past its timeout.
 ```python
-import bpy
-scene = bpy.context.scene
-scene.frame_start = 1
-scene.frame_end = 50
-scene.render.fps = 24
-scene.render.image_settings.file_format = 'PNG'
-scene.render.filepath = 'C:/tmp/anim_'
-bpy.ops.render.render(animation=True)
+import bpy, os
+out_dir = os.path.expanduser("~/blender_renders")
+os.makedirs(out_dir, exist_ok=True)
+scn = bpy.context.scene
+for i in range(scn.frame_start, scn.frame_end + 1):
+    scn.frame_set(i)
+    scn.render.filepath = os.path.join(out_dir, f"frame_{i:04d}.png")
+    bpy.ops.render.render(write_still=True)
+# Then assemble with ffmpeg on the host:
+# ffmpeg -framerate 24 -i frame_%04d.png -pix_fmt yuv420p out.mp4
 ```
 
 ## Common pitfalls

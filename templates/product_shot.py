@@ -1,8 +1,8 @@
 """Studio product shot: glossy dark ground, cyclorama backdrop, dark world, gold subject."""
-import importlib.util, bpy, math
+import importlib.util, bpy, os, math
 spec = importlib.util.spec_from_file_location(
     "_skill_helpers",
-    r"C:\Users\zulut\.claude\skills\blender\scripts\_helpers.py")
+    os.path.expanduser("~/.claude/skills/blender/scripts/_helpers.py"))
 H = importlib.util.module_from_spec(spec); spec.loader.exec_module(H)
 
 H.reset_scene()
@@ -25,7 +25,7 @@ subject = H.add_cube('Subject', SUBJECT_LOCATION, (0.6, 0.6, 0.6), gold)
 
 H.set_world_sky(top=(0.02, 0.02, 0.02), strength=0.3)
 key, fill, back = H.three_point_light(target=SUBJECT_LOCATION, key_energy=6.0)
-H.set_render(engine='BLENDER_EEVEE', resolution=(1280, 800), samples=64)
+H.set_render(engine=H.safe_engine(), resolution=(1280, 800), samples=64)
 
 cam = H.auto_frame([subject], padding=1.4, elevation_deg=18, azimuth_deg=35, lens=50)
 

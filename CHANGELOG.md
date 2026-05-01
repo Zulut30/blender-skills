@@ -2,6 +2,48 @@
 
 All notable changes to the Blender skill.
 
+## 1.7.0 — Public-release polish
+
+### Added
+- `LICENSE` file (MIT) at repo root.
+- `docs/quickstart.md` — 5-minute path from clone to first render.
+- `docs/repo-metadata.md` — exact GitHub description, topics, branch protection, social-preview guidance.
+- `docs/releasing.md` — semver checklist, tag flow, hotfix flow, release notes template.
+- README badges (CI, license, Blender) and a clear "What this is — and isn't" framing.
+
+### Changed
+- README rewritten for a first-time public visitor: install → quickstart pointer → use cases → contributing.
+- README first-person voice replaced with neutral phrasing; stale "34 entries" count removed.
+
+### Fixed
+- Broken markdown link to `LICENSE` (file added).
+
+## 1.6.1 — Audit follow-up
+
+### Added
+- 42 missing docstrings on public helpers; helper-index regenerated with richer notes.
+- `import_obj` and `import_fbx` now do `os.path.exists` precheck and raise `FileNotFoundError` with the resolved path.
+- 7 new pitfalls (#35–41): linked libraries, multi-user mesh, `scene.collection.objects.link` re-runs, EEVEE viewport-vs-render samples, Cycles GPU silent CPU fallback, `modifier_apply` on hidden objects, `transform_apply` drops shape keys.
+
+## 1.6.0 — Audit fix-up
+
+### Added
+- `import_glb(filepath, name)` helper.
+- "Required reading on activation" section in SKILL.md.
+- Validator checks: `check_no_hardcoded_user_paths`, `check_doc_helpers_exist`.
+
+### Changed
+- All `C:\Users\zulut\...` paths in SKILL.md and templates replaced with `os.path.expanduser("~/.claude/skills/blender/...")`.
+- 3 templates' hardcoded `engine='BLENDER_EEVEE'` replaced with `engine=H.safe_engine()`.
+- `reference/api/camera.md` / `safe-operators.md` / `animation.md` recipes rewritten to stop demonstrating the anti-patterns their own pitfall sections warn against.
+
+### Fixed
+- `hdri_world` validates `image.has_data` after load.
+- `bbox_of` updates view layer and reads depsgraph-evaluated bbox.
+- `paving_stones` uses an 8-slot material palette instead of per-tile copies.
+- `set_sunset_world` probes `HOSEK_WILKIE` first (NISHITA missing on 5.1).
+- Removed ghost reference to non-existent `add_draped_cloth` from SKILL.md.
+
 ## 1.5.1 — Maintenance / structure pass
 
 - Frontmatter normalised; description tightened for accurate skill activation.

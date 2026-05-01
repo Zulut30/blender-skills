@@ -1,5 +1,9 @@
 # Materials beyond Principled
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### emissive area light material (for plane-light)
 ```python
 import bpy
@@ -42,5 +46,8 @@ nt.links.new(noise.outputs['Fac'], ramp.inputs['Fac'])
 nt.links.new(ramp.outputs['Color'], bsdf.inputs['Base Color'])
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- Find shader nodes by `n.type == 'BSDF_PRINCIPLED'`, never by display name (localized in non-EN UIs).
+- `mesh.materials.append(mat)` is non-idempotent — `mesh.materials.clear()` first or guard by name.
+- `material.copy()` per tile (e.g. paving with color jitter) blows up datablocks; bake variation into one shader instead.

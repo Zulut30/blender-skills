@@ -1,5 +1,9 @@
 # Scene inspection
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### count tris in scene
 ```python
 import bpy
@@ -38,5 +42,8 @@ center = (mn + mx) * 0.5
 size   = (mx - mn)
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- `obj.bound_box` lazy-evaluates — call `bpy.context.view_layer.update()` after operators before reading it.
+- For accurate post-modifier bbox, read from `obj.evaluated_get(bpy.context.evaluated_depsgraph_get())`.
+- Filter by `obj.type in {'MESH','CURVE','SURFACE','META','FONT'}`; cameras/lights pollute scene-wide bboxes.

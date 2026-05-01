@@ -1,5 +1,9 @@
 # Common operators safely
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### exit to OBJECT mode safely
 ```python
 import bpy
@@ -28,5 +32,8 @@ if mesh and mesh.users == 0:
 bpy.ops.outliner.orphans_purge(do_local_ids=True, do_recursive=True)
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- Many operators need an active object + Object mode; set `view_layer.objects.active` and `select_set(True)` first.
+- Avoid `bpy.ops.object.select_all` (poll fails headless); iterate `scene.objects` and `o.select_set(...)` instead.
+- Local Python vars do NOT survive across `execute_blender_code` calls — re-fetch via `bpy.data.objects['Name']`.

@@ -1,5 +1,9 @@
 # Modifiers
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### add Subdivision Surface
 ```python
 obj = bpy.context.object
@@ -55,5 +59,8 @@ for mod in list(obj.modifiers):
         bpy.ops.object.modifier_apply(modifier=mod.name)
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- `Decimate` ratio<0.1 can produce non-manifold geometry — guard with poly count, then `remove_doubles`/`normals_make_consistent`.
+- Boolean EXACT solver fails on non-manifold inputs; ensure both meshes are clean before applying.
+- `modifier_apply` requires Object mode + active object; use `temp_override` or set `view_layer.objects.active` first.

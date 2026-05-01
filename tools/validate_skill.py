@@ -87,11 +87,11 @@ def check_skill_md_and_frontmatter(results):
         results.append(Result(False, "frontmatter missing/empty 'description'"))
         ok = False
     else:
-        if len(fm["description"]) > 1024:
+        if len(fm["description"]) > 300:
             results.append(
                 Result(
                     False,
-                    "frontmatter 'description' too long (%d chars > 1024)"
+                    "frontmatter 'description' too long (%d chars > 300)"
                     % len(fm["description"]),
                 )
             )
@@ -115,6 +115,26 @@ def check_skill_md_and_frontmatter(results):
             results.append(Result(True, "frontmatter version=%s" % fm["version"]))
 
     return fm if ok else None
+
+
+def check_all_json_files(results):
+    """Validate every *.json file in the repo (excluding .git/__pycache__)."""
+    bad = 0
+    total = 0
+    for jp in REPO_ROOT.rglob("*.json"):
+        rel = jp.relative_to(REPO_ROOT).as_posix()
+        if rel.startswith(".git/") or "__pycache__" in rel:
+            continue
+        total += 1
+        try:
+            json.loads(jp.read_text(encoding="utf-8"))
+        except Exception as e:
+            results.append(Result(False, "JSON invalid: %s -- %s" % (rel, e)))
+            bad += 1
+    if bad == 0 and total > 0:
+        results.append(Result(True, "all %d JSON files parse cleanly" % total))
+    elif total == 0:
+        results.append(Result(True, "no JSON files found (skipped)"))
 
 
 def collect_md_files():
@@ -334,6 +354,7 @@ def main():
     tree = check_helpers_parse(results)
     index = check_helper_index_json(results)
     check_index_consistency(results, tree, index)
+    check_all_json_files(results)
 
     for r in results:
         print(r)

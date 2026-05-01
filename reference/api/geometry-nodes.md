@@ -1,5 +1,9 @@
 # Geometry Nodes
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### create empty geometry node group and assign via Nodes modifier
 ```python
 import bpy
@@ -24,5 +28,8 @@ ng.links.new(n_in.outputs['Geometry'], dp.inputs['Mesh'])
 ng.links.new(dp.outputs['Points'], n_out.inputs['Geometry'])
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- Create node groups via `bpy.data.node_groups.new('GN','GeometryNodeTree')`, not operators (poll fails without UI context).
+- Attach via `mod = obj.modifiers.new('Nodes','NODES'); mod.node_group = ng` — operator-based attach also needs UI.
+- Always wire Group Input → ... → Group Output; an unconnected output silently produces empty geometry.

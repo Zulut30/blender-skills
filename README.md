@@ -18,15 +18,24 @@ Requires:
 - Blender 5.x with the **Blender MCP** addon enabled and server started
 - (For animation) `ffmpeg` on PATH for assembling rendered frames into `.mp4`
 
-## What's in the box
+## Repository layout
 
-| File | Purpose |
-|---|---|
-| `SKILL.md` | Workflow contract, helper index, anti-patterns. The doc Claude reads first. |
-| `scripts/_helpers.py` | ~2200 lines, 44 helpers: primitives, procedural materials, gothic/courtyard geometry, atmosphere, animation. |
-| `reference/pitfalls.md` | 28+ documented gotchas — Blender locale, slotted-actions API, EEVEE volume blackouts, `auto_frame` overshoot, MCP timeout, etc. |
-| `reference/api-cheatsheet.md` | Compact bpy/bmesh recipes for what helpers don't cover. |
-| `templates/` | Ready scenes: `basic_scene.py`, `product_shot.py`, `arch_building.py`. |
+- `SKILL.md` — Claude Code skill instructions (workflow, anti-patterns, recipes).
+- `CHANGELOG.md` — version history.
+- `scripts/_helpers.py` — Blender Python helpers (~3400 lines, 83 public functions).
+- `reference/pitfalls.md` — known Blender / MCP pitfalls (34 entries).
+- `reference/api-cheatsheet.md` — index linking to per-topic API reference files.
+- `reference/api/*.md` — bpy/bmesh recipes by topic (mesh, modifiers, geometry-nodes, materials, lighting-world, camera, render, animation, inspection, safe-operators).
+- `reference/helper-index.json` — machine-readable helper catalog.
+- `reference/helper-index.md` — human-readable helper catalog.
+- `templates/` — ready scenes: `basic_scene.py`, `product_shot.py`, `arch_building.py`, `interior_room.py`, `turntable.py`, `landscape.py`.
+- `docs/setup-blender-mcp.md` — install / sanity check.
+- `docs/troubleshooting.md` — common failure modes and fixes.
+- `docs/security.md` — agent safety rules.
+- `tools/validate_skill.py` — repository validator (stdlib only).
+- `tests/test_helper_index.py` — stdlib helper-index test.
+- `tests/smoke_*.py` — optional Blender smoke scripts (run manually inside Blender).
+- `.github/workflows/skill-validate.yml` — CI: validator + tests on every push/PR.
 
 ## The contract
 

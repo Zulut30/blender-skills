@@ -1,5 +1,9 @@
 # Lighting / world
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### HDRI environment from file
 ```python
 import bpy
@@ -44,5 +48,8 @@ v = (mathutils.Vector(target.matrix_world.translation) - light.location)
 light.rotation_euler = v.to_track_quat('-Z', 'Y').to_euler()
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- World Volume Scatter density >0.005 with long camera distance produces black render in EEVEE.
+- HDRI on Windows: pass forward slashes or raw strings; `bpy.data.images.load` can return image with no data otherwise.
+- Set `world.use_nodes = True` before touching `world.node_tree` — it's `None` by default on fresh worlds.

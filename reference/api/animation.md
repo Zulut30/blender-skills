@@ -1,5 +1,9 @@
 # Animation (basics)
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### keyframe location/rotation on frames 1 and 50
 ```python
 import bpy, math
@@ -25,5 +29,8 @@ scene.render.filepath = 'C:/tmp/anim_'
 bpy.ops.render.render(animation=True)
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- `bpy.ops.render.render(animation=True)` times out the MCP — render per-frame in chunks of 20-30.
+- Blender 5.x Slotted Actions: `action.fcurves` is gone; use `action.layers[0].strips[0].channelbag(slot).fcurves`.
+- Bezier auto-clamped handles overshoot when orbit keys are >45° apart — distribute keys finely or use LINEAR.

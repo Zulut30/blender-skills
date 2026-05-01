@@ -1,5 +1,9 @@
 # Mesh editing (bmesh)
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### subdivide cube faces
 ```python
 import bpy, bmesh
@@ -48,5 +52,8 @@ bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0001)
 bm.to_mesh(obj.data); bm.free(); obj.data.update()
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- Call `bm.verts.ensure_lookup_table()` (and `edges`/`faces`) after topology edits before indexing.
+- Always `bm.to_mesh(obj.data); bm.free(); obj.data.update()` — skipping any one yields stale viewport.
+- Pair every `bm = bmesh.new()` with `bm.free()`; leaks accumulate across repeated script runs.

@@ -1,5 +1,9 @@
 # Camera
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### DOF with focus_object and fstop
 ```python
 cam = bpy.data.objects['Camera'].data
@@ -26,5 +30,8 @@ c.track_axis = 'TRACK_NEGATIVE_Z'
 c.up_axis = 'UP_Y'
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- `bpy.data.objects['Camera']` is locale-fragile (becomes "Камера" in ru_RU); prefer `bpy.context.scene.camera`.
+- Repeated `frame_camera` calls leave behind `SkillCamera.001/.002` and inflate bbox — clean up old cameras first.
+- Pass only hero meshes to `auto_frame`; ground planes and skyboxes blow up the bbox and shrink the subject.

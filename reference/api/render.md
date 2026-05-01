@@ -1,5 +1,9 @@
 # Render
 
+Back to [API cheatsheet](../api-cheatsheet.md).
+
+## Practical notes
+
 ### switch to CYCLES if available, else EEVEE
 ```python
 import bpy
@@ -36,5 +40,8 @@ scene.render.filepath = 'C:/tmp/out.png'
 bpy.ops.render.render(write_still=True)
 ```
 
----
-[Back to API cheatsheet index](../api-cheatsheet.md)
+## Common pitfalls
+
+- Hardcoding `'BLENDER_EEVEE_NEXT'` breaks on Blender 5.1; probe enum_items and use `safe_engine()`.
+- EEVEE samples may live under `scene.eevee` or `scene.eevee_next` depending on build — `getattr` both.
+- `render_viewport_to_path` may write to a temp dir; trust the `filepath` field in the response, not the input path.

@@ -18,9 +18,24 @@ jobs:
           python -m py_compile tools/validate_skill.py
           python -m py_compile tests/test_helper_index.py
 
-      - name: AST-parse helpers
+      - name: AST-parse helpers and smoke scripts
         run: |
-          python -c "import ast, pathlib; ast.parse(pathlib.Path('scripts/_helpers.py').read_text(encoding='utf-8')); print('helpers AST OK')"
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          for path in [
+              'scripts/_helpers.py',
+              'tests/smoke_basic_scene.py',
+              'tests/smoke_product_shot.py',
+              'tests/smoke_animation_chunk.py',
+          ]:
+              p = Path(path)
+              if not p.exists():
+                  print(path, 'MISSING')
+                  continue
+              ast.parse(p.read_text(encoding='utf-8'))
+              print(path, 'AST OK')
+          PY
 
       - name: Validate skill structure
         run: python tools/validate_skill.py

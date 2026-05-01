@@ -22,7 +22,7 @@ Requires:
 
 - `SKILL.md` — Claude Code skill instructions (workflow, anti-patterns, recipes).
 - `CHANGELOG.md` — version history.
-- `scripts/_helpers.py` — Blender Python helpers (~3400 lines, 83 public functions).
+- `scripts/_helpers.py` — Blender Python helpers. See [`reference/helper-index.md`](reference/helper-index.md) for the current helper list.
 - `reference/pitfalls.md` — known Blender / MCP pitfalls (34 entries).
 - `reference/api-cheatsheet.md` — index linking to per-topic API reference files.
 - `reference/api/*.md` — bpy/bmesh recipes by topic (mesh, modifiers, geometry-nodes, materials, lighting-world, camera, render, animation, inspection, safe-operators).
@@ -81,6 +81,7 @@ Blender 5.1.1, ru_RU locale (with `use_translate_new_dataname=True` — yes, eve
 ```bash
 python tools/validate_skill.py
 python tests/test_helper_index.py
+python -m py_compile tools/validate_skill.py tests/test_helper_index.py
 ```
 
 Optional Blender smoke tests (require Blender on PATH):
